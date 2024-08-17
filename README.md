@@ -5,6 +5,9 @@ This browser extension allows you to easily upload media (images, videos, audio)
 Currently, it is only available for Firefox. 
 
 This was made as I had just recently switched from Windows to Arch Linux and realized how reliant I was on using the ShareX browser integration. This is my attempt at replacing it for those running a Zipline instance already.
+
+Zipline is required for this to work, available to selfhost here: https://github.com/diced/zipline
+
 ## Installation
 
 1. Download the extension files.
