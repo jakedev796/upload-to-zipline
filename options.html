@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Upload to Zipline Settings</title>
+    <style>
+        body {
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+        }
+        button {
+            margin-top: 20px;
+            padding: 5px 10px;
+        }
+        #status {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<h2>Zipline Uploader Settings</h2>
+
+<label for="requestURL">Request URL:</label>
+<input type="text" id="requestURL">
+
+<label for="authToken">Authorization Token:</label>
+<input type="text" id="authToken">
+
+<button id="save">Save</button>
+
+<div id="status"></div>
+
+<script src="options.js"></script>
+</body>
+</html>
