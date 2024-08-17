@@ -10,6 +10,8 @@ Zipline is required for this to work, available to selfhost here: https://github
 
 ## Installation
 
+Firefox Extension: PENDING
+
 1. Download the extension files.
 2. Open your browser's extension page (e.g., `about:addons` in Firefox).
 3. Click on "Load Temporary Add-on" or "Load Unpacked Extension" (depending on your browser).
