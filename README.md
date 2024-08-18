@@ -10,7 +10,7 @@ Zipline is required for this to work, available to selfhost here: https://github
 
 ## Installation
 
-Firefox Extension: PENDING
+Firefox Extension: https://addons.mozilla.org/en-US/firefox/addon/upload-to-zipline/
 
 1. Download the extension files.
 2. Open your browser's extension page (e.g., `about:addons` in Firefox).
