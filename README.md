@@ -6,8 +6,8 @@ A browser extension that allows you to upload media files (images, videos, audio
 
 The extension is now organized into two separate directories for Firefox and Chrome compatibility:
 
-- `firefox/` - Firefox extension (Manifest V3)
-- `chrome/` - Chrome extension (Manifest V3)
+- `firefox/` - Firefox extension
+- `chrome/` - Chrome extension
 
 ## Installation
 
@@ -16,14 +16,14 @@ The extension is now organized into two separate directories for Firefox and Chr
 2. Click "This Firefox" in the sidebar
 3. Click "Load Temporary Add-on"
 4. Select the `firefox/manifest.json` file
-5. The extension will be installed temporarily
+5. The extension should now be installed
 
 ### Chrome
 1. Open Chrome and navigate to `chrome://extensions/`
 2. Enable "Developer mode" in the top right
 3. Click "Load unpacked"
 4. Select the `chrome/` folder
-5. The extension will be installed
+5. The extension should now be installed
 
 ## Configuration
 
@@ -31,6 +31,8 @@ The extension is now organized into two separate directories for Firefox and Chr
 2. Enter your Zipline request URL (e.g., `https://your-zipline-instance.com/api/upload`)
 3. Enter your authorization token
 4. Click "Save"
+
+>Note: All of these can be found in the .sxcu ShareX file.
 
 ## Usage
 
@@ -45,7 +47,6 @@ The extension is now organized into two separate directories for Firefox and Chr
 - Supports images, videos, and audio files
 - Automatic clipboard copying of uploaded URLs
 - Desktop notifications for upload status
-- Secure storage of configuration settings
 - Cross-browser compatibility (Firefox and Chrome)
 
 ## Technical Details
