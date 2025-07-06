@@ -1,54 +1,82 @@
-# Upload to Zipline Browser Extension
+# Upload to Zipline Extension
 
-This browser extension allows you to easily upload media (images, videos, audio) to your Zipline instance directly from your browser.
+A browser extension that allows you to upload media files (images, videos, audio) directly to Zipline from the browser context menu.
 
-Currently, it is only available for Firefox. 
+## Project Structure
 
-This was made as I had just recently switched from Windows to Arch Linux and realized how reliant I was on using the ShareX browser integration. This is my attempt at replacing it for those running a Zipline instance already.
+The extension is now organized into two separate directories for Firefox and Chrome compatibility:
 
-Zipline is required for this to work, available to selfhost here: https://github.com/diced/zipline
+- `firefox/` - Firefox extension (Manifest V3)
+- `chrome/` - Chrome extension (Manifest V3)
 
 ## Installation
 
-Firefox Extension: https://addons.mozilla.org/en-US/firefox/addon/upload-to-zipline/
+### Firefox
+1. Open Firefox and navigate to `about:debugging`
+2. Click "This Firefox" in the sidebar
+3. Click "Load Temporary Add-on"
+4. Select the `firefox/manifest.json` file
+5. The extension will be installed temporarily
 
-1. Download the extension files.
-2. Open your browser's extension page (e.g., `about:addons` in Firefox).
-3. Click on "Load Temporary Add-on" or "Load Unpacked Extension" (depending on your browser).
-4. Select the manifest.json file from the downloaded extension files.
+### Chrome
+1. Open Chrome and navigate to `chrome://extensions/`
+2. Enable "Developer mode" in the top right
+3. Click "Load unpacked"
+4. Select the `chrome/` folder
+5. The extension will be installed
 
 ## Configuration
 
-Before using the extension, you need to configure it with your Zipline server details:
-
-1. Open the WebUI of your Zipline instance.
-2. Generate a ShareX config (Your username in the top right > Manage Account > Generate ShareX Config).
-3. Open the generated ShareX config file in a text editor.
-4. Locate the "RequestURL" and "Headers" (which contains the "Authorization" token) in the config file.
-5. In your browser, right-click on the extension icon and select "Options" or "Preferences".
-6. Fill in the "Request URL" and "Authorization Token" fields with the values from your ShareX config file.
-7. Click "Save".
+1. Right-click on the extension icon and select "Options"
+2. Enter your Zipline request URL (e.g., `https://your-zipline-instance.com/api/upload`)
+3. Enter your authorization token
+4. Click "Save"
 
 ## Usage
 
-1. Right-click on any media (image, video, or audio) on a webpage.
-2. Select "Upload to Zipline" from the context menu.
-3. The media will be uploaded to your Zipline instance, and the resulting URL will be copied to your clipboard.
-4. You'll see a notification when the upload is complete.
+1. Right-click on any image, video, or audio file in your browser
+2. Select "Upload to Zipline" from the context menu
+3. The file will be uploaded to your Zipline instance
+4. The URL will be automatically copied to your clipboard
+5. You'll receive a notification confirming the upload
 
-## Troubleshooting
+## Features
 
-- If you see a notification about configuring your settings, make sure you've completed the Configuration steps above.
-- If uploads fail, double-check your Request URL and Authorization Token in the extension options.
-- For any other issues, check the browser's developer console for error messages.
+- Supports images, videos, and audio files
+- Automatic clipboard copying of uploaded URLs
+- Desktop notifications for upload status
+- Secure storage of configuration settings
+- Cross-browser compatibility (Firefox and Chrome)
 
-## Privacy and Security
+## Technical Details
 
-This extension only uploads media when you explicitly choose to do so through the context menu. Your Zipline server details are stored locally in your browser and are never sent to any third-party servers.
+### Manifest V3 Compatibility
+Both versions have been updated to use Manifest V3, which is required for modern browser extensions.
 
-## Contributing
+### Key Changes Made
+- Updated from Manifest V2 to Manifest V3
+- Separated host permissions from regular permissions
+- Added content scripts for clipboard operations
+- Updated API calls to use appropriate browser APIs (chrome.* vs browser.*)
+- Improved error handling and user feedback
 
-If you'd like to contribute to this project, please feel free to submit pull requests or open issues on the project's GitHub repository.
+### Permissions Required
+- `storage` - For saving configuration settings
+- `contextMenus` - For the right-click context menu
+- `activeTab` - For accessing the current tab
+- `downloads` - For handling file downloads
+- `clipboardWrite` - For copying URLs to clipboard
+- `notifications` - For showing upload status notifications
+- `*://*/*` - For uploading files from any website
+
+## Development
+
+To modify the extension:
+
+1. Make changes to the appropriate browser-specific files
+2. For Firefox: Update files in the `firefox/` directory
+3. For Chrome: Update files in the `chrome/` directory
+4. Reload the extension in the browser's extension management page
 
 ## License
 

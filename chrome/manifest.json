@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Upload to Zipline",
+  "version": "1.3",
+  "permissions": [
+    "storage",
+    "contextMenus",
+    "activeTab",
+    "downloads",
+    "clipboardWrite",
+    "notifications",
+    "scripting"
+  ],
+  "host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

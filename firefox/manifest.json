@@ -1,5 +1,5 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Upload to Zipline",
   "version": "1.3",
   "permissions": [
@@ -9,24 +9,32 @@
     "downloads",
     "clipboardWrite",
     "notifications",
+    "scripting"
+  ],
+  "host_permissions": [
     "*://*/*"
   ],
   "background": {
-    "scripts": ["background.js"],
-    "persistent": false
+    "scripts": ["background.js"]
   },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"]
+    }
+  ],
   "options_ui": {
     "page": "options.html",
-    "browser_style": true
+    "open_in_tab": true
   },
   "icons": {
     "48": "icon48.png",
     "128": "icon128.png"
   },
-  "applications": {
+  "browser_specific_settings": {
     "gecko": {
       "id": "jake@shreves.dev",
-      "strict_min_version": "68.0"
+      "strict_min_version": "109.0"
     }
   }
 }
