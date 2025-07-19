@@ -2,6 +2,8 @@
 
 A browser extension that allows you to upload media files (images, videos, audio) directly to Zipline from the browser context menu.
 
+[![Get the add-on](https://img.shields.io/amo/v/upload-to-zipline?label=Firefox%20Add-on&logo=firefox&color=orange)](https://addons.mozilla.org/en-US/firefox/addon/upload-to-zipline/)
+
 ## Project Structure
 
 The extension is now organized into two separate directories for Firefox and Chrome compatibility:
