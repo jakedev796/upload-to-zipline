@@ -2,21 +2,18 @@ function displayStatus(message, success = true) {
     const statusElement = document.getElementById('status');
     statusElement.textContent = message;
     statusElement.style.color = success ? 'green' : 'red';
-    setTimeout(() => statusElement.textContent = '', 3000); // Clear message after 3 seconds
+    setTimeout(() => statusElement.textContent = '', 3000);
 }
 
 document.addEventListener('DOMContentLoaded', function () {
-    console.log("Options page loaded");
-
-    // Load settings from storage
-    browser.storage.sync.get(['requestURL', 'authToken']).then((items) => {
-        console.log("Settings retrieved:", items);
-        if (items.requestURL) {
-            document.getElementById('requestURL').value = items.requestURL;
-        }
-        if (items.authToken) {
-            document.getElementById('authToken').value = items.authToken;
-        }
+    browser.storage.sync.get(['requestURL', 'authToken', 'expiryEnabled', 'expiryTime', 'maxViewsEnabled', 'maxViews', 'shortenEnabled']).then((items) => {
+        if (items.requestURL) document.getElementById('requestURL').value = items.requestURL;
+        if (items.authToken) document.getElementById('authToken').value = items.authToken;
+        document.getElementById('expiryEnabled').checked = !!items.expiryEnabled;
+        if (items.expiryTime) document.getElementById('expiryTime').value = items.expiryTime;
+        document.getElementById('maxViewsEnabled').checked = !!items.maxViewsEnabled;
+        if (items.maxViews) document.getElementById('maxViews').value = items.maxViews;
+        document.getElementById('shortenEnabled').checked = !!items.shortenEnabled;
     }).catch((error) => {
         console.error("Error retrieving settings:", error);
     });
@@ -25,18 +22,19 @@ document.addEventListener('DOMContentLoaded', function () {
 document.getElementById('save').addEventListener('click', function () {
     const requestURL = document.getElementById('requestURL').value;
     const authToken = document.getElementById('authToken').value;
-
-    console.log("Saving settings:", { requestURL, authToken });
+    const expiryEnabled = document.getElementById('expiryEnabled').checked;
+    const expiryTime = document.getElementById('expiryTime').value;
+    const maxViewsEnabled = document.getElementById('maxViewsEnabled').checked;
+    const maxViews = parseInt(document.getElementById('maxViews').value, 10) || 0;
+    const shortenEnabled = document.getElementById('shortenEnabled').checked;
 
     browser.storage.sync.set({
-        requestURL: requestURL,
-        authToken: authToken
+        requestURL, authToken, expiryEnabled, expiryTime, maxViewsEnabled, maxViews, shortenEnabled
     }).then(() => {
-        document.getElementById('status').textContent = 'Settings saved!';
-        setTimeout(() => {
-            document.getElementById('status').textContent = '';
-        }, 3000);
+        browser.runtime.sendMessage({ action: 'rebuildMenus' }).catch(() => {});
+        displayStatus('Settings saved!');
     }).catch((error) => {
         console.error("Error saving settings:", error);
+        displayStatus('Error saving settings.', false);
     });
 });

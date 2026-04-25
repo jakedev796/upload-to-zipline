@@ -11,10 +11,27 @@
             display: block;
             margin-top: 10px;
         }
-        input[type="text"] {
+        input[type="text"], input[type="number"] {
             width: 100%;
             padding: 5px;
             margin-top: 5px;
+            box-sizing: border-box;
+        }
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .toggle-row input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        .toggle-row label {
+            margin-top: 0;
+        }
+        .indent {
+            margin-left: 24px;
         }
         button {
             margin-top: 20px;
@@ -23,6 +40,10 @@
         #status {
             margin-top: 10px;
             font-weight: bold;
+        }
+        hr {
+            margin-top: 20px;
+            margin-bottom: 5px;
         }
     </style>
 </head>
@@ -34,6 +55,32 @@
 
 <label for="authToken">Authorization Token:</label>
 <input type="text" id="authToken">
+
+<hr>
+<h3>Advanced Options</h3>
+
+<div class="toggle-row">
+    <input type="checkbox" id="expiryEnabled">
+    <label for="expiryEnabled">Enable auto-delete after expiry time</label>
+</div>
+<div class="indent">
+    <label for="expiryTime">Expiry time (e.g. 90d, 1w, 24h):</label>
+    <input type="text" id="expiryTime" placeholder="90d">
+</div>
+
+<div class="toggle-row">
+    <input type="checkbox" id="maxViewsEnabled">
+    <label for="maxViewsEnabled">Enable max view count limit</label>
+</div>
+<div class="indent">
+    <label for="maxViews">Max views before deletion:</label>
+    <input type="number" id="maxViews" min="1" placeholder="100">
+</div>
+
+<div class="toggle-row">
+    <input type="checkbox" id="shortenEnabled">
+    <label for="shortenEnabled">Enable right-click URL shortening</label>
+</div>
 
 <button id="save">Save</button>
 
