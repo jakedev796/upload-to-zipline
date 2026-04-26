@@ -34,7 +34,15 @@ The extension is now organized into two separate directories for Firefox and Chr
 3. Enter your authorization token
 4. Click "Save"
 
->Note: All of these can be found in the .sxcu ShareX file.
+>Note: The request URL and authorization token can be found in the .sxcu ShareX file.
+
+### Advanced Options
+
+Each option below is independently toggleable from the extension's options page:
+
+- **Auto-delete after expiry time** — sends the `x-zipline-deletes-at` header so Zipline removes the upload after the given duration. Accepts values like `30s`, `5m`, `24h`, `7d`, `1w`, `1M`, or `1y`.
+- **Max view count limit** — sends the `x-zipline-max-views` header so Zipline removes the upload after it has been viewed N times.
+- **Right-click URL shortening** — adds a "Shorten URL with Zipline" entry to the right-click menu on links, which sends the URL to Zipline's `/api/user/urls` endpoint and copies the shortened URL to your clipboard.
 
 ## Usage
 
@@ -44,24 +52,22 @@ The extension is now organized into two separate directories for Firefox and Chr
 4. The URL will be automatically copied to your clipboard
 5. You'll receive a notification confirming the upload
 
+If URL shortening is enabled, you can also right-click any link and choose "Shorten URL with Zipline".
+
 ## Features
 
 - Supports images, videos, and audio files
 - Automatic clipboard copying of uploaded URLs
 - Desktop notifications for upload status
+- Optional auto-delete after a configurable expiry time
+- Optional max-view limit for uploads
+- Optional right-click URL shortening
 - Cross-browser compatibility (Firefox and Chrome)
 
 ## Technical Details
 
 ### Manifest V3 Compatibility
 Both versions have been updated to use Manifest V3, which is required for modern browser extensions.
-
-### Key Changes Made
-- Updated from Manifest V2 to Manifest V3
-- Separated host permissions from regular permissions
-- Added content scripts for clipboard operations
-- Updated API calls to use appropriate browser APIs (chrome.* vs browser.*)
-- Improved error handling and user feedback
 
 ### Permissions Required
 - `storage` - For saving configuration settings
