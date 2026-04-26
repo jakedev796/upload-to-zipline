@@ -1,0 +1,25 @@
+{
+  "name": "upload-to-zipline",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "vue-tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "devDependencies": {
+    "@wxt-dev/module-vue": "^1.0.3",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.2.7",
+    "wxt": "^0.20.25"
+  },
+  "dependencies": {
+    "vue": "^3.5.33"
+  }
+}

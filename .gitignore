@@ -1,1 +1,8 @@
 /.idea/
+CLAUDE.md
+docs/
+node_modules/
+.output/
+.wxt/
+*.zip
+stats.html
