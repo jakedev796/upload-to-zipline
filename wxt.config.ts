@@ -1,11 +1,15 @@
 import { defineConfig } from 'wxt';
 import { resolve } from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   alias: {
     '@': resolve('.'),
   },
+  vite: () => ({
+    plugins: [tailwindcss()],
+  }),
   manifest: {
     name: 'Upload to Zipline',
     description: 'Upload media to Zipline from the right-click menu.',

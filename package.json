@@ -14,7 +14,9 @@
     "postinstall": "wxt prepare"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
     "@wxt-dev/module-vue": "^1.0.3",
+    "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
     "vue-tsc": "^3.2.7",
     "wxt": "^0.20.25"
