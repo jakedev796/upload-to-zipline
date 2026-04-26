@@ -11,7 +11,7 @@
             display: block;
             margin-top: 10px;
         }
-        input[type="text"], input[type="number"] {
+        input[type="text"], input[type="number"], select {
             width: 100%;
             padding: 5px;
             margin-top: 5px;
@@ -64,8 +64,18 @@
     <label for="expiryEnabled">Enable auto-delete after expiry time</label>
 </div>
 <div class="indent">
-    <label for="expiryTime">Expiry time (e.g. 90d, 1w, 24h):</label>
-    <input type="text" id="expiryTime" placeholder="90d">
+    <label for="expiryTime">Expiry time:</label>
+    <select id="expiryTime">
+        <option value="1h">1 hour</option>
+        <option value="6h">6 hours</option>
+        <option value="1d">1 day</option>
+        <option value="3d">3 days</option>
+        <option value="7d" selected>7 days</option>
+        <option value="14d">14 days</option>
+        <option value="30d">30 days</option>
+        <option value="90d">90 days</option>
+        <option value="1y">1 year</option>
+    </select>
 </div>
 
 <div class="toggle-row">

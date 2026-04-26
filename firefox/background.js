@@ -73,7 +73,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 
             const blob = await fetch(mediaURL).then(response => response.blob());
             let filename = mediaURL.split("/").pop().split("?")[0];
-            filename = filename.replace(/[​-‍﻿]/g, '');
+            filename = filename.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
             const formData = new FormData();
             formData.append('file', blob, filename);
@@ -137,7 +137,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
                 return;
             }
 
-            const shortenEndpoint = new URL(requestURL).origin + "/api/user/urls";
+            const shortenEndpoint = requestURL.replace(/\/api\/upload\/?$/, '') + "/api/user/urls";
             const response = await fetch(shortenEndpoint, {
                 method: "POST",
                 headers: {
@@ -149,7 +149,7 @@ browser.contextMenus.onClicked.addListener(async (info, tab) => {
 
             if (response.ok) {
                 const result = await response.json();
-                const shortURL = result.url || (result.files && result.files[0]);
+                const shortURL = result.url;
                 if (!shortURL) throw new Error("No URL returned in response");
 
                 let clipboardSuccess = false;
