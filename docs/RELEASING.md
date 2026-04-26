@@ -13,11 +13,11 @@ pnpm version 2.0.1 --no-git-tag-version
 pnpm install --frozen-lockfile
 pnpm compile && pnpm zip && pnpm zip:firefox
 
-# 4. Commit, tag, push
+# 4. Commit, tag (annotated), push
 git add package.json
 git commit -m "chore: release v2.0.1"
-git tag v2.0.1
-git push origin master --follow-tags
+git tag -a v2.0.1 -m "v2.0.1"        # -a creates an annotated tag — REQUIRED
+git push origin master --follow-tags  # --follow-tags only pushes annotated tags
 ```
 
 The `release.yml` workflow fires on the tag, asserts the tag matches `package.json` `version`, builds for both browsers, creates a GitHub Release with the chrome/firefox/sources zips attached, and submits to AMO and the Chrome Web Store via `wxt submit`. Each store's submit step skips with a warning if its credentials aren't configured.
