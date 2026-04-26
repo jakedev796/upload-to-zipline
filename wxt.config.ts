@@ -1,7 +1,11 @@
 import { defineConfig } from 'wxt';
+import { resolve } from 'node:path';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
+  alias: {
+    '@': resolve('.'),
+  },
   manifest: {
     name: 'Upload to Zipline',
     description: 'Upload media to Zipline from the right-click menu.',
