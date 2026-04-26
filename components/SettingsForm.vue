@@ -47,7 +47,13 @@ async function onSave() {
     setStatus('Max views must be a number greater than or equal to 1.', 'error');
     return;
   }
-  await saveSettings(settings.value);
+  const toSave: Settings = {
+    ...settings.value,
+    requestURL: settings.value.requestURL.trim(),
+    authToken: settings.value.authToken.trim(),
+  };
+  settings.value = toSave;
+  await saveSettings(toSave);
   await notifyMenusToRebuild();
   setStatus('Settings saved!', 'success');
 }
@@ -96,7 +102,7 @@ async function onSave() {
         v-model="settings.expiryEnabled"
         label="Auto-delete after expiry"
       />
-      <div v-show="settings.expiryEnabled">
+      <div v-if="settings.expiryEnabled">
         <label for="expiryTime" class="block text-xs text-text-muted mb-1">Expiry time</label>
         <select
           id="expiryTime"
@@ -120,7 +126,7 @@ async function onSave() {
         v-model="settings.maxViewsEnabled"
         label="Max view count limit"
       />
-      <div v-show="settings.maxViewsEnabled">
+      <div v-if="settings.maxViewsEnabled">
         <label for="maxViews" class="block text-xs text-text-muted mb-1">Max views before deletion</label>
         <input
           id="maxViews"
