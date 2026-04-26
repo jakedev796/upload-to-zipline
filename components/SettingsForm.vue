@@ -54,7 +54,7 @@ async function onSave() {
 </script>
 
 <template>
-  <form class="space-y-3" @submit.prevent="onSave">
+  <form class="space-y-3" novalidate @submit.prevent="onSave">
     <section class="bg-panel border border-border rounded-card p-4 space-y-3">
       <h2 class="text-[10.5px] tracking-[0.07em] uppercase font-semibold text-text-muted">
         Connection
