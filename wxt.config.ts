@@ -17,6 +17,10 @@ export default defineConfig({
     action: {
       default_title: 'Upload to Zipline',
     },
+    icons: {
+      48: '/icon/48.png',
+      128: '/icon/128.png',
+    },
     browser_specific_settings: {
       gecko: {
         id: 'jake@shreves.dev',
