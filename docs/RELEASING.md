@@ -22,7 +22,9 @@ git push origin master --follow-tags
 
 The `release.yml` workflow fires on the tag, asserts the tag matches `package.json` `version`, builds for both browsers, creates a GitHub Release with the chrome/firefox/sources zips attached, and submits to AMO and the Chrome Web Store via `wxt submit`. Each store's submit step skips with a warning if its credentials aren't configured.
 
-For dry runs, push a tag with a `-` suffix (e.g. `v2.0.1-beta1`). GitHub treats it as a pre-release; AMO/CWS submits stay gated by the same secrets check.
+### Pre-releases
+
+Tags with a `-` suffix (e.g. `v2.0.1-beta1`) become GitHub pre-releases. They run the **same** `release.yml` workflow with the **same** submit semantics — if AMO or CWS secrets are configured, the pre-release **will** be submitted to that store. To dry-run without store submission, run the workflow on a fork or temporarily unset the relevant secrets.
 
 ## Required secrets
 
