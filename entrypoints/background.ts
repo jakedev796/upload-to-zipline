@@ -35,7 +35,7 @@ export default defineBackground(() => {
 function showNotification(title: string, message: string): void {
   browser.notifications.create({
     type: 'basic',
-    iconUrl: browser.runtime.getURL('/icon/128.png'),
+    iconUrl: browser.runtime.getURL('/icon/48.png'),
     title,
     message,
   });
@@ -87,7 +87,7 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
 
   const blob = await fetch(mediaURL).then((r) => r.blob());
   let filename = (mediaURL.split('/').pop() ?? '').split('?')[0];
-  filename = filename.replace(/[​-‍﻿]/g, '');
+  filename = filename.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
   const formData = new FormData();
   formData.append('file', blob, filename);
