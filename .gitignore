@@ -1,6 +1,7 @@
 /.idea/
 CLAUDE.md
-docs/
+docs/*
+!docs/RELEASING.md
 node_modules/
 .output/
 .wxt/

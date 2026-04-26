@@ -1,0 +1,84 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Verify tag matches package.json version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+
+      - run: pnpm compile
+      - run: pnpm build
+      - run: pnpm build:firefox
+      - run: pnpm zip
+      - run: pnpm zip:firefox
+
+      - name: Create GitHub Release with artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            .output/upload-to-zipline-*-chrome.zip
+            .output/upload-to-zipline-*-firefox.zip
+            .output/upload-to-zipline-*-sources.zip
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## Store availability
+
+            This release has been submitted to the Chrome Web Store and Firefox AMO.
+            Updates typically take a few hours (Chrome) or hours-to-days (Firefox) to
+            clear store review and propagate to installed browsers.
+
+            Direct downloads of the build artifacts are attached below.
+
+      - name: Submit to Firefox AMO
+        env:
+          FIREFOX_EXTENSION_ID: ${{ secrets.FIREFOX_EXTENSION_ID }}
+          FIREFOX_JWT_ISSUER: ${{ secrets.FIREFOX_JWT_ISSUER }}
+          FIREFOX_JWT_SECRET: ${{ secrets.FIREFOX_JWT_SECRET }}
+        run: |
+          if [ -z "$FIREFOX_JWT_ISSUER" ]; then
+            echo "::warning::FIREFOX_JWT_ISSUER not set; skipping AMO submission."
+            exit 0
+          fi
+          pnpm wxt submit \
+            --firefox-zip .output/upload-to-zipline-*-firefox.zip \
+            --firefox-sources-zip .output/upload-to-zipline-*-sources.zip
+
+      - name: Submit to Chrome Web Store
+        env:
+          CHROME_EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+          CHROME_CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+          CHROME_CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+          CHROME_REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+        run: |
+          if [ -z "$CHROME_CLIENT_ID" ]; then
+            echo "::warning::CHROME_CLIENT_ID not set; skipping Chrome Web Store submission."
+            exit 0
+          fi
+          pnpm wxt submit \
+            --chrome-zip .output/upload-to-zipline-*-chrome.zip
