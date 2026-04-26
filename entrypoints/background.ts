@@ -18,6 +18,17 @@ export default defineBackground(() => {
         );
       }
     }
+    if (info.menuItemId === 'shortenURL' && info.linkUrl) {
+      try {
+        await shortenURL(info.linkUrl, tab);
+      } catch (err) {
+        console.error('URL shortening failed:', err);
+        showNotification(
+          'Shorten Failed',
+          'An error occurred while shortening the URL. Please check your settings and try again.'
+        );
+      }
+    }
   });
 });
 
@@ -123,6 +134,48 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
     );
   } else {
     showNotification('Upload Successful', `The file was uploaded successfully. URL: ${finalURL}`);
+  }
+}
+
+async function shortenURL(linkURL: string, tab: { id?: number } | undefined): Promise<void> {
+  const { requestURL, authToken } = await browser.storage.sync.get(['requestURL', 'authToken']);
+
+  if (!requestURL || !authToken) {
+    showNotification(
+      'Configuration Required',
+      'Please configure your Zipline settings in the extension options.'
+    );
+    void browser.runtime.openOptionsPage();
+    return;
+  }
+
+  const shortenEndpoint =
+    String(requestURL).replace(/\/api\/upload\/?$/, '') + '/api/user/urls';
+
+  const response = await fetch(shortenEndpoint, {
+    method: 'POST',
+    headers: {
+      authorization: String(authToken),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ destination: linkURL }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('Shorten failed with status:', response.status, 'Response:', errorText);
+    throw new Error(`Shorten failed with status ${response.status}`);
+  }
+
+  const result = await response.json();
+  const shortURL = result.url as string | undefined;
+  if (!shortURL) throw new Error('No URL returned in response');
+
+  const clipboardSuccess = tab?.id ? await copyToClipboard(shortURL, tab.id) : false;
+  if (clipboardSuccess) {
+    showNotification('URL Shortened', 'The shortened URL has been copied to your clipboard.');
+  } else {
+    showNotification('URL Shortened', `Shortened URL: ${shortURL}`);
   }
 }
 
