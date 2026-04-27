@@ -1,3 +1,10 @@
+export const IMAGE_FORMATS = [
+  { value: 'webp', label: 'WebP' },
+  { value: 'avif', label: 'AVIF' },
+  { value: 'jpeg', label: 'JPEG' },
+  { value: 'png',  label: 'PNG'  },
+] as const;
+
 export const EXPIRY_PRESETS = [
   { value: '1h', label: '1 hour' },
   { value: '6h', label: '6 hours' },
@@ -18,6 +25,11 @@ export interface Settings {
   maxViewsEnabled: boolean;
   maxViews: number;
   shortenEnabled: boolean;
+  imageConversionEnabled: boolean;
+  imageConversionFormat: string;
+  imageConversionQuality: number;
+  imageCompressionEnabled: boolean;
+  imageCompressionQuality: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -28,6 +40,11 @@ export const DEFAULT_SETTINGS: Settings = {
   maxViewsEnabled: false,
   maxViews: 0,
   shortenEnabled: false,
+  imageConversionEnabled: false,
+  imageConversionFormat: 'webp',
+  imageConversionQuality: 80,
+  imageCompressionEnabled: false,
+  imageCompressionQuality: 80,
 };
 
 export const SETTINGS_KEYS: (keyof Settings)[] = [
@@ -38,4 +55,9 @@ export const SETTINGS_KEYS: (keyof Settings)[] = [
   'maxViewsEnabled',
   'maxViews',
   'shortenEnabled',
+  'imageConversionEnabled',
+  'imageConversionFormat',
+  'imageConversionQuality',
+  'imageCompressionEnabled',
+  'imageCompressionQuality',
 ];

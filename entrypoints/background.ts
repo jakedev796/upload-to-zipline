@@ -67,6 +67,11 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
     expiryTime,
     maxViewsEnabled,
     maxViews,
+    imageConversionEnabled,
+    imageConversionFormat,
+    imageConversionQuality,
+    imageCompressionEnabled,
+    imageCompressionQuality,
   } = await browser.storage.sync.get([
     'requestURL',
     'authToken',
@@ -74,6 +79,11 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
     'expiryTime',
     'maxViewsEnabled',
     'maxViews',
+    'imageConversionEnabled',
+    'imageConversionFormat',
+    'imageConversionQuality',
+    'imageCompressionEnabled',
+    'imageCompressionQuality',
   ]);
 
   if (!requestURL || !authToken) {
@@ -89,8 +99,24 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
   let filename = (mediaURL.split('/').pop() ?? '').split('?')[0];
   filename = filename.replace(/[\u200B-\u200D\uFEFF]/g, '');
 
+  let uploadBlob = blob;
+  let uploadFilename = filename;
+  const isImage = blob.type.startsWith('image/');
+
+  if (imageConversionEnabled && isImage) {
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
+    uploadBlob = await canvas.convertToBlob({
+      type: `image/${imageConversionFormat}`,
+      quality: Number(imageConversionQuality) / 100,
+    });
+    const ext = String(imageConversionFormat) === 'jpeg' ? 'jpg' : String(imageConversionFormat);
+    uploadFilename = uploadFilename.replace(/\.[^.]+$/, '') + '.' + ext;
+  }
+
   const formData = new FormData();
-  formData.append('file', blob, filename);
+  formData.append('file', uploadBlob, uploadFilename);
 
   const headers: Record<string, string> = {
     authorization: String(authToken),
@@ -98,6 +124,10 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
   };
   if (expiryEnabled && expiryTime) headers['x-zipline-deletes-at'] = String(expiryTime);
   if (maxViewsEnabled && maxViews) headers['x-zipline-max-views'] = String(maxViews);
+  const clientConversionApplied = imageConversionEnabled && isImage;
+  if (imageCompressionEnabled && !clientConversionApplied) {
+    headers['x-zipline-image-compression-percent'] = String(imageCompressionQuality);
+  }
 
   const response = await fetch(String(requestURL), { method: 'POST', headers, body: formData });
 
