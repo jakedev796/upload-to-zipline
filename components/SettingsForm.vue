@@ -166,11 +166,11 @@ async function onSave() {
       <ToggleSwitch
         id="imageConversionEnabled"
         v-model="settings.imageConversionEnabled"
-        label="上傳前轉換圖片格式"
+        label="Convert image format before upload"
       />
       <template v-if="settings.imageConversionEnabled">
         <div>
-          <label for="imageConversionFormat" class="block text-xs text-text-muted mb-1">目標格式</label>
+          <label for="imageConversionFormat" class="block text-xs text-text-muted mb-1">Target format</label>
           <select
             id="imageConversionFormat"
             v-model="settings.imageConversionFormat"
@@ -183,7 +183,7 @@ async function onSave() {
           </select>
         </div>
         <div>
-          <label for="imageConversionQuality" class="block text-xs text-text-muted mb-1">品質（1–100）</label>
+          <label for="imageConversionQuality" class="block text-xs text-text-muted mb-1">Quality (1–100)</label>
           <input
             id="imageConversionQuality"
             v-model.number="settings.imageConversionQuality"
@@ -200,20 +200,20 @@ async function onSave() {
       <details class="group">
         <summary class="text-xs text-text-muted cursor-pointer select-none list-none flex items-center gap-1">
           <span class="transition-transform group-open:rotate-90">▶</span>
-          進階設定
+          Advanced
         </summary>
         <div class="mt-3 space-y-3">
           <ToggleSwitch
             id="imageCompressionEnabled"
             v-model="settings.imageCompressionEnabled"
-            label="伺服器端壓縮（Zipline）"
+            label="Server-side compression (Zipline)"
           />
           <template v-if="settings.imageCompressionEnabled">
             <p class="text-xs text-text-muted">
-              若格式轉換已啟用，此設定對圖片不生效（避免雙重壓縮）。
+              Has no effect on images when format conversion is enabled (prevents double compression).
             </p>
             <div>
-              <label for="imageCompressionQuality" class="block text-xs text-text-muted mb-1">壓縮品質（1–100）</label>
+              <label for="imageCompressionQuality" class="block text-xs text-text-muted mb-1">Compression quality (1–100)</label>
               <input
                 id="imageCompressionQuality"
                 v-model.number="settings.imageCompressionQuality"
