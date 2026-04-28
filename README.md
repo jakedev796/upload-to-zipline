@@ -2,7 +2,8 @@
 
 A browser extension that uploads media to Zipline directly from the right-click menu, with optional URL shortening, auto-delete, and view-count limits — all configurable from the toolbar popup.
 
-[![Get the add-on](https://img.shields.io/amo/v/upload-to-zipline?label=Firefox%20Add-on&logo=firefox&color=orange)](https://addons.mozilla.org/en-US/firefox/addon/upload-to-zipline/)
+[![Firefox Extension ](https://img.shields.io/amo/v/upload-to-zipline?label=Firefox%20Add-on&logo=firefox&color=orange)](https://addons.mozilla.org/en-US/firefox/addon/upload-to-zipline/)
+[![Chrome Extension](https://img.shields.io/chrome-web-store/v/ngeeifojlejglmpkclhkopklbjkmlmdo?label=Chrome%20Web%20Store&logo=googlechrome&color=blue)](https://chromewebstore.google.com/detail/upload-to-zipline/ngeeifojlejglmpkclhkopklbjkmlmdo)
 
 <p align="center">
   <img src="upload-to-zipline.png" alt="Upload to Zipline options page" width="420" />
