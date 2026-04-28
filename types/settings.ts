@@ -5,6 +5,8 @@ export const IMAGE_FORMATS = [
   { value: 'png',  label: 'PNG'  },
 ] as const;
 
+export type ImageFormat = (typeof IMAGE_FORMATS)[number]['value'];
+
 export const EXPIRY_PRESETS = [
   { value: '1h', label: '1 hour' },
   { value: '6h', label: '6 hours' },
@@ -26,7 +28,7 @@ export interface Settings {
   maxViews: number;
   shortenEnabled: boolean;
   imageConversionEnabled: boolean;
-  imageConversionFormat: string;
+  imageConversionFormat: ImageFormat;
   imageConversionQuality: number;
   imageCompressionEnabled: boolean;
   imageCompressionQuality: number;

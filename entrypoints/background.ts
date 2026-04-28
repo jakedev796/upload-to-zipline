@@ -1,3 +1,14 @@
+import { DEFAULT_SETTINGS, IMAGE_FORMATS, type ImageFormat } from '@/types/settings';
+
+const CONVERTIBLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const IMAGE_TYPE_TO_EXTENSION: Record<string, string> = {
+  'image/avif': 'avif',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
+const IMAGE_FORMAT_VALUES = new Set<string>(IMAGE_FORMATS.map((format) => format.value));
+
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(createContextMenu);
   browser.runtime.onStartup.addListener(createContextMenu);
@@ -39,6 +50,90 @@ function showNotification(title: string, message: string): void {
     title,
     message,
   });
+}
+
+function getImageFormat(value: unknown): ImageFormat {
+  return IMAGE_FORMAT_VALUES.has(String(value))
+    ? (value as ImageFormat)
+    : DEFAULT_SETTINGS.imageConversionFormat;
+}
+
+function getQuality(value: unknown, fallback: number): number {
+  const quality = Number(value);
+  return Number.isFinite(quality) && quality >= 1 && quality <= 100 ? quality : fallback;
+}
+
+function withImageExtension(filename: string, mimeType: string): string {
+  const extension = IMAGE_TYPE_TO_EXTENSION[mimeType];
+  if (!extension) return filename;
+
+  const basename = filename.replace(/\.[^.]+$/, '') || 'upload';
+  return `${basename}.${extension}`;
+}
+
+function readAscii(bytes: Uint8Array, offset: number, length: number): string {
+  let value = '';
+  for (let i = offset; i < offset + length; i += 1) {
+    value += String.fromCharCode(bytes[i]);
+  }
+  return value;
+}
+
+function readUint32BigEndian(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset] * 0x1000000 +
+    bytes[offset + 1] * 0x10000 +
+    bytes[offset + 2] * 0x100 +
+    bytes[offset + 3]
+  );
+}
+
+function readUint32LittleEndian(bytes: Uint8Array, offset: number): number {
+  return (
+    bytes[offset] +
+    bytes[offset + 1] * 0x100 +
+    bytes[offset + 2] * 0x10000 +
+    bytes[offset + 3] * 0x1000000
+  );
+}
+
+function isAnimatedPng(bytes: Uint8Array): boolean {
+  let offset = 8;
+
+  while (offset + 8 <= bytes.length) {
+    const length = readUint32BigEndian(bytes, offset);
+    const type = readAscii(bytes, offset + 4, 4);
+    if (type === 'acTL') return true;
+    if (type === 'IDAT' || type === 'IEND') return false;
+    offset += 12 + length;
+  }
+
+  return false;
+}
+
+function isAnimatedWebp(bytes: Uint8Array): boolean {
+  if (readAscii(bytes, 0, 4) !== 'RIFF' || readAscii(bytes, 8, 4) !== 'WEBP') return false;
+
+  let offset = 12;
+  while (offset + 8 <= bytes.length) {
+    const type = readAscii(bytes, offset, 4);
+    const length = readUint32LittleEndian(bytes, offset + 4);
+    if (type === 'ANIM') return true;
+    offset += 8 + length + (length % 2);
+  }
+
+  return false;
+}
+
+async function isConvertibleImage(blob: Blob): Promise<boolean> {
+  if (!CONVERTIBLE_IMAGE_TYPES.has(blob.type)) return false;
+  if (blob.type === 'image/jpeg') return true;
+
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  if (blob.type === 'image/png') return !isAnimatedPng(bytes);
+  if (blob.type === 'image/webp') return !isAnimatedWebp(bytes);
+
+  return false;
 }
 
 async function copyToClipboard(text: string, tabId: number): Promise<boolean> {
@@ -101,18 +196,26 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
 
   let uploadBlob = blob;
   let uploadFilename = filename;
-  const isImage = blob.type.startsWith('image/');
+  const canConvertImage = await isConvertibleImage(blob);
+  const conversionFormat = getImageFormat(imageConversionFormat);
+  const conversionQuality = getQuality(
+    imageConversionQuality,
+    DEFAULT_SETTINGS.imageConversionQuality
+  );
 
-  if (imageConversionEnabled && isImage) {
+  if (imageConversionEnabled && canConvertImage) {
     const bitmap = await createImageBitmap(blob);
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
     canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
-    uploadBlob = await canvas.convertToBlob({
-      type: `image/${imageConversionFormat}`,
-      quality: Number(imageConversionQuality) / 100,
-    });
-    const ext = String(imageConversionFormat) === 'jpeg' ? 'jpg' : String(imageConversionFormat);
-    uploadFilename = uploadFilename.replace(/\.[^.]+$/, '') + '.' + ext;
+    try {
+      uploadBlob = await canvas.convertToBlob({
+        type: `image/${conversionFormat}`,
+        quality: conversionQuality / 100,
+      });
+      uploadFilename = withImageExtension(uploadFilename, uploadBlob.type);
+    } finally {
+      bitmap.close();
+    }
   }
 
   const formData = new FormData();
@@ -124,9 +227,11 @@ async function uploadMedia(mediaURL: string, tab: { id?: number } | undefined): 
   };
   if (expiryEnabled && expiryTime) headers['x-zipline-deletes-at'] = String(expiryTime);
   if (maxViewsEnabled && maxViews) headers['x-zipline-max-views'] = String(maxViews);
-  const clientConversionApplied = imageConversionEnabled && isImage;
+  const clientConversionApplied = uploadBlob !== blob;
   if (imageCompressionEnabled && !clientConversionApplied) {
-    headers['x-zipline-image-compression-percent'] = String(imageCompressionQuality);
+    headers['x-zipline-image-compression-percent'] = String(
+      getQuality(imageCompressionQuality, DEFAULT_SETTINGS.imageCompressionQuality)
+    );
   }
 
   const response = await fetch(String(requestURL), { method: 'POST', headers, body: formData });
