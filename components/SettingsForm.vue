@@ -8,6 +8,7 @@ import {
 import {
   DEFAULT_SETTINGS,
   EXPIRY_PRESETS,
+  IMAGE_FORMATS,
   type Settings,
 } from '@/types/settings';
 import ToggleSwitch from './ToggleSwitch.vue';
@@ -45,6 +46,24 @@ async function onSave() {
     (!Number.isFinite(settings.value.maxViews) || settings.value.maxViews < 1)
   ) {
     setStatus('Max views must be a number greater than or equal to 1.', 'error');
+    return;
+  }
+  if (
+    settings.value.imageConversionEnabled &&
+    (!Number.isFinite(settings.value.imageConversionQuality) ||
+      settings.value.imageConversionQuality < 1 ||
+      settings.value.imageConversionQuality > 100)
+  ) {
+    setStatus('Conversion quality must be between 1 and 100.', 'error');
+    return;
+  }
+  if (
+    settings.value.imageCompressionEnabled &&
+    (!Number.isFinite(settings.value.imageCompressionQuality) ||
+      settings.value.imageCompressionQuality < 1 ||
+      settings.value.imageCompressionQuality > 100)
+  ) {
+    setStatus('Compression quality must be between 1 and 100.', 'error');
     return;
   }
   const toSave: Settings = {
@@ -138,6 +157,77 @@ async function onSave() {
                  focus:outline-none focus:border-accent"
         />
       </div>
+    </section>
+
+    <section class="bg-panel border border-border rounded-card p-4 space-y-3">
+      <h2 class="text-[10.5px] tracking-[0.07em] uppercase font-semibold text-text-muted">
+        Image Processing
+      </h2>
+      <ToggleSwitch
+        id="imageConversionEnabled"
+        v-model="settings.imageConversionEnabled"
+        label="Convert image format before upload"
+      />
+      <template v-if="settings.imageConversionEnabled">
+        <div>
+          <label for="imageConversionFormat" class="block text-xs text-text-muted mb-1">Target format</label>
+          <select
+            id="imageConversionFormat"
+            v-model="settings.imageConversionFormat"
+            class="w-full bg-[#0a0a0c] border border-border rounded-md px-3 py-2 text-sm
+                   focus:outline-none focus:border-accent appearance-none"
+          >
+            <option v-for="fmt in IMAGE_FORMATS" :key="fmt.value" :value="fmt.value">
+              {{ fmt.label }}
+            </option>
+          </select>
+        </div>
+        <div>
+          <label for="imageConversionQuality" class="block text-xs text-text-muted mb-1">Quality (1–100)</label>
+          <input
+            id="imageConversionQuality"
+            v-model.number="settings.imageConversionQuality"
+            type="number"
+            min="1"
+            max="100"
+            placeholder="80"
+            class="w-full bg-[#0a0a0c] border border-border rounded-md px-3 py-2 text-sm
+                   focus:outline-none focus:border-accent"
+          />
+        </div>
+      </template>
+
+      <details class="group">
+        <summary class="text-xs text-text-muted cursor-pointer select-none list-none flex items-center gap-1">
+          <span class="transition-transform group-open:rotate-90">▶</span>
+          Advanced
+        </summary>
+        <div class="mt-3 space-y-3">
+          <ToggleSwitch
+            id="imageCompressionEnabled"
+            v-model="settings.imageCompressionEnabled"
+            label="Server-side compression (Zipline)"
+          />
+          <template v-if="settings.imageCompressionEnabled">
+            <p class="text-xs text-text-muted">
+              Has no effect on images when format conversion is enabled (prevents double compression).
+            </p>
+            <div>
+              <label for="imageCompressionQuality" class="block text-xs text-text-muted mb-1">Compression quality (1–100)</label>
+              <input
+                id="imageCompressionQuality"
+                v-model.number="settings.imageCompressionQuality"
+                type="number"
+                min="1"
+                max="100"
+                placeholder="80"
+                class="w-full bg-[#0a0a0c] border border-border rounded-md px-3 py-2 text-sm
+                       focus:outline-none focus:border-accent"
+              />
+            </div>
+          </template>
+        </div>
+      </details>
     </section>
 
     <section class="bg-panel border border-border rounded-card p-4">
