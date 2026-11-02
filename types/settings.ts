@@ -19,7 +19,16 @@ export const EXPIRY_PRESETS = [
   { value: '1y', label: '1 year' },
 ] as const;
 
+export type Locale = 'zh-TW' | 'en' | 'ja';
+
+export const LOCALE_OPTIONS: { value: Locale; label: string }[] = [
+  { value: 'zh-TW', label: '繁體中文' },
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: '日本語' },
+];
+
 export interface Settings {
+  locale: Locale;
   requestURL: string;
   authToken: string;
   expiryEnabled: boolean;
@@ -36,6 +45,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  locale: 'zh-TW',
   requestURL: '',
   authToken: '',
   expiryEnabled: false,
@@ -52,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const SETTINGS_KEYS: (keyof Settings)[] = [
+  'locale',
   'requestURL',
   'authToken',
   'expiryEnabled',

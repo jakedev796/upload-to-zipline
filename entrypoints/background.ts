@@ -1,5 +1,6 @@
-import { DEFAULT_SETTINGS, IMAGE_FORMATS, type ImageFormat } from '@/types/settings';
+import { DEFAULT_SETTINGS, IMAGE_FORMATS, type ImageFormat, type Locale } from '@/types/settings';
 import { addUploadHistory } from '@/composables/useHistory';
+import { translate } from '@/composables/useI18n';
 
 const CONVERTIBLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const IMAGE_TYPE_TO_EXTENSION: Record<string, string> = {
@@ -9,6 +10,18 @@ const IMAGE_TYPE_TO_EXTENSION: Record<string, string> = {
   'image/webp': 'webp',
 };
 const IMAGE_FORMAT_VALUES = new Set<string>(IMAGE_FORMATS.map((format) => format.value));
+
+async function getCurrentLocale(): Promise<Locale> {
+  try {
+    const { locale } = await browser.storage.sync.get(['locale']);
+    if (locale === 'en' || locale === 'zh-TW' || locale === 'ja') {
+      return locale as Locale;
+    }
+  } catch {
+    // fallback to default
+  }
+  return DEFAULT_SETTINGS.locale;
+}
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(createContextMenu);
@@ -93,9 +106,10 @@ export default defineBackground(() => {
       }
     } catch (err) {
       console.error('Context menu action failed:', err);
+      const loc = await getCurrentLocale();
       showNotification(
-        'Action Failed',
-        'An error occurred while processing the request. Please check your settings.'
+        translate(loc, 'notifyActionFailedTitle'),
+        translate(loc, 'notifyActionFailedMsg')
       );
     }
   });
@@ -206,27 +220,32 @@ async function isConvertibleImage(blob: Blob): Promise<boolean> {
 }
 
 async function copyToClipboard(text: string, tabId?: number): Promise<boolean> {
-  if (tabId) {
-    try {
-      await browser.scripting.executeScript({
-        target: { tabId },
-        func: (textToCopy: string) => {
-          navigator.clipboard.writeText(textToCopy).catch((err) =>
-            console.error('Failed to copy to clipboard in page:', err)
-          );
-        },
-        args: [text],
-      });
-      return true;
-    } catch {
-      // Fallback below
-    }
-  }
-
   if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(text);
       return true;
+    } catch {
+      // Fallback to content script injection below
+    }
+  }
+
+  if (tabId) {
+    try {
+      const results = await browser.scripting.executeScript({
+        target: { tabId },
+        func: async (textToCopy: string) => {
+          try {
+            await navigator.clipboard.writeText(textToCopy);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        args: [text],
+      });
+      if (results?.[0]?.result === true) {
+        return true;
+      }
     } catch {
       // Silent ignore
     }
@@ -307,10 +326,12 @@ export async function uploadBlob(
     'imageCompressionQuality',
   ]);
 
+  const loc = await getCurrentLocale();
+
   if (!requestURL || !authToken) {
     showNotification(
-      'Configuration Required',
-      'Please configure your Zipline settings in the extension options.'
+      translate(loc, 'notifyConfigRequiredTitle'),
+      translate(loc, 'notifyConfigRequiredMsg')
     );
     void browser.runtime.openOptionsPage();
     throw new Error('Missing Zipline configuration');
@@ -396,11 +417,14 @@ export async function uploadBlob(
   const clipboardSuccess = await copyToClipboard(finalURL, tab?.id);
   if (clipboardSuccess) {
     showNotification(
-      'Upload Successful',
-      'The file was uploaded successfully and the URL has been copied to your clipboard.'
+      translate(loc, 'notifyUploadSuccessTitle'),
+      translate(loc, 'notifyUploadSuccessMsg')
     );
   } else {
-    showNotification('Upload Successful', `The file was uploaded successfully. URL: ${finalURL}`);
+    showNotification(
+      translate(loc, 'notifyUploadSuccessTitle'),
+      translate(loc, 'notifyUploadSuccessFallbackMsg', { url: finalURL })
+    );
   }
 
   // Save to recent upload history
@@ -438,34 +462,94 @@ async function captureVisibleDataUrl(windowId?: number): Promise<string> {
   });
 }
 
-async function captureVisible(tab?: { id?: number; windowId?: number }): Promise<string> {
-  const dataUrl = await captureVisibleDataUrl(tab?.windowId);
-  const res = await fetch(dataUrl);
-  const blob = await res.blob();
-  const filename = generateTimestampFilename('screenshot-visible', 'png');
-  return await uploadBlob(blob, filename, tab);
+function isProtectedUrl(url?: string): boolean {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  return (
+    lower.startsWith('chrome:') ||
+    lower.startsWith('chrome-extension:') ||
+    lower.startsWith('chrome-untrusted:') ||
+    lower.startsWith('about:') ||
+    lower.startsWith('edge:') ||
+    lower.startsWith('opera:') ||
+    lower.startsWith('brave:') ||
+    lower.startsWith('vivaldi:') ||
+    lower.startsWith('moz-extension:') ||
+    lower.startsWith('view-source:') ||
+    lower.startsWith('devtools:') ||
+    lower.includes('chrome.google.com/webstore') ||
+    lower.includes('chromewebstore.google.com') ||
+    lower.includes('addons.mozilla.org')
+  );
 }
 
-async function startAreaSnip(tab?: { id?: number; url?: string }): Promise<void> {
+function isProtectedPageError(err: unknown): boolean {
+  if (!err) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes('chrome://') ||
+    msg.includes('Cannot access a chrome') ||
+    msg.includes('The extensions gallery cannot be scripted') ||
+    msg.includes('Cannot access contents of the given frame') ||
+    msg.includes('Missing host permission') ||
+    msg.includes('cannot be scripted') ||
+    msg.includes('Extension manifest must request permission') ||
+    msg.includes('about:blank') ||
+    msg.includes('about:')
+  );
+}
+
+async function captureVisible(tab?: { id?: number; windowId?: number; url?: string }): Promise<string> {
+  const loc = await getCurrentLocale();
+  if (isProtectedUrl(tab?.url)) {
+    showNotification(
+      translate(loc, 'notifyProtectedPageNoticeTitle'),
+      translate(loc, 'notifyProtectedPageNoticeMsg')
+    );
+    throw new Error(translate(loc, 'notifyProtectedPageNoticeMsg'));
+  }
+  try {
+    const dataUrl = await captureVisibleDataUrl(tab?.windowId);
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
+    const filename = generateTimestampFilename('screenshot-visible', 'png');
+    return await uploadBlob(blob, filename, tab);
+  } catch (err) {
+    if (isProtectedPageError(err)) {
+      showNotification(
+        translate(loc, 'notifyProtectedPageNoticeTitle'),
+        translate(loc, 'notifyProtectedPageNoticeMsg')
+      );
+      throw new Error(translate(loc, 'notifyProtectedPageNoticeMsg'));
+    }
+    throw err;
+  }
+}
+
+async function startAreaSnip(tab?: { id?: number; url?: string; pendingUrl?: string }): Promise<void> {
+  const loc = await getCurrentLocale();
+
   if (!tab?.id) {
-    showNotification('Screenshot Error', 'No active tab found for area screenshot.');
+    showNotification(
+      translate(loc, 'notifyScreenshotErrorTitle'),
+      translate(loc, 'notifyNoActiveTab')
+    );
     return;
   }
 
-  const url = tab.url || '';
-  if (
-    url.startsWith('chrome:') ||
-    url.startsWith('about:') ||
-    url.startsWith('edge:') ||
-    url.startsWith('moz-extension:') ||
-    url.startsWith('chrome-extension:')
-  ) {
-    showNotification('Notice', 'Cannot capture screenshots on protected browser internal pages.');
+  const url = tab.url || tab.pendingUrl || '';
+  if (isProtectedUrl(url)) {
+    showNotification(
+      translate(loc, 'notifyProtectedPageNoticeTitle'),
+      translate(loc, 'notifyProtectedPageNoticeMsg')
+    );
     return;
   }
+
+  const tipText = translate(loc, 'areaSnipTip');
 
   try {
-    await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip' });
+    await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
   } catch {
     // If content script was not ready, inject dynamically
     try {
@@ -473,10 +557,20 @@ async function startAreaSnip(tab?: { id?: number; url?: string }): Promise<void>
         target: { tabId: tab.id },
         files: ['/content-scripts/area-selector.js'],
       });
-      await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip' });
+      await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
     } catch (injectErr) {
-      console.error('Failed to inject area selector:', injectErr);
-      showNotification('Screenshot Error', 'Could not initialize area screenshot on this page.');
+      if (isProtectedPageError(injectErr)) {
+        showNotification(
+          translate(loc, 'notifyProtectedPageNoticeTitle'),
+          translate(loc, 'notifyProtectedPageNoticeMsg')
+        );
+      } else {
+        console.error('Failed to inject area selector:', injectErr);
+        showNotification(
+          translate(loc, 'notifyScreenshotErrorTitle'),
+          translate(loc, 'notifyInjectFailed')
+        );
+      }
     }
   }
 }
@@ -528,13 +622,52 @@ async function handleAreaSnipCompleted(
   await uploadBlob(croppedBlob, filename, tab);
 }
 
-async function uploadClipboardFromTab(tab?: { id?: number }): Promise<void> {
-  if (!tab?.id) {
-    showNotification('Clipboard Upload', 'No active tab found to read clipboard.');
-    return;
+async function readClipboardImageInBackground(): Promise<Blob | null> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.read) return null;
+  try {
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      for (const type of item.types) {
+        if (type.startsWith('image/')) {
+          return await item.getType(type);
+        }
+      }
+    }
+  } catch {
+    // Not supported or denied in background context
   }
+  return null;
+}
+
+async function uploadClipboardFromTab(tab?: { id?: number; url?: string }): Promise<void> {
+  const loc = await getCurrentLocale();
 
   try {
+    // 1. Try reading directly in background context (works in Firefox with clipboardRead permission)
+    const bgBlob = await readClipboardImageInBackground();
+    if (bgBlob) {
+      const filename = generateTimestampFilename('clipboard', 'png');
+      await uploadBlob(bgBlob, filename, tab);
+      return;
+    }
+
+    if (!tab?.id) {
+      showNotification(
+        translate(loc, 'notifyClipboardTitle'),
+        translate(loc, 'notifyNoActiveTab')
+      );
+      return;
+    }
+
+    if (isProtectedUrl(tab.url)) {
+      showNotification(
+        translate(loc, 'notifyProtectedPageNoticeTitle'),
+        translate(loc, 'notifyProtectedPageNoticeMsg')
+      );
+      return;
+    }
+
+    // 2. Fallback to reading via active tab content script (works in Chrome MV3 service worker)
     const results = await browser.scripting.executeScript({
       target: { tabId: tab.id },
       func: async () => {
@@ -561,7 +694,10 @@ async function uploadClipboardFromTab(tab?: { id?: number }): Promise<void> {
 
     const dataUrl = results?.[0]?.result as string | null;
     if (!dataUrl) {
-      showNotification('Clipboard Upload', 'No image found in clipboard.');
+      showNotification(
+        translate(loc, 'notifyClipboardTitle'),
+        translate(loc, 'notifyNoImageInClipboard')
+      );
       return;
     }
 
@@ -570,18 +706,29 @@ async function uploadClipboardFromTab(tab?: { id?: number }): Promise<void> {
     const filename = generateTimestampFilename('clipboard', 'png');
     await uploadBlob(blob, filename, tab);
   } catch (err) {
-    console.error('Failed to read clipboard:', err);
-    showNotification('Clipboard Upload', 'Failed to read clipboard image.');
+    if (isProtectedPageError(err)) {
+      showNotification(
+        translate(loc, 'notifyProtectedPageNoticeTitle'),
+        translate(loc, 'notifyProtectedPageNoticeMsg')
+      );
+    } else {
+      console.error('Failed to read clipboard:', err);
+      showNotification(
+        translate(loc, 'notifyClipboardTitle'),
+        translate(loc, 'notifyReadClipboardFailed')
+      );
+    }
   }
 }
 
 async function shortenURL(linkURL: string, tab: { id?: number } | undefined): Promise<void> {
   const { requestURL, authToken } = await browser.storage.sync.get(['requestURL', 'authToken']);
+  const loc = await getCurrentLocale();
 
   if (!requestURL || !authToken) {
     showNotification(
-      'Configuration Required',
-      'Please configure your Zipline settings in the extension options.'
+      translate(loc, 'notifyConfigRequiredTitle'),
+      translate(loc, 'notifyConfigRequiredMsg')
     );
     void browser.runtime.openOptionsPage();
     return;
@@ -611,32 +758,56 @@ async function shortenURL(linkURL: string, tab: { id?: number } | undefined): Pr
 
   const clipboardSuccess = await copyToClipboard(shortURL, tab?.id);
   if (clipboardSuccess) {
-    showNotification('URL Shortened', 'The shortened URL has been copied to your clipboard.');
+    showNotification(
+      translate(loc, 'notifyUrlShortenedTitle'),
+      translate(loc, 'notifyUrlShortenedMsg')
+    );
   } else {
-    showNotification('URL Shortened', `Shortened URL: ${shortURL}`);
+    showNotification(
+      translate(loc, 'notifyUrlShortenedTitle'),
+      translate(loc, 'notifyUrlShortenedFallbackMsg', { url: shortURL })
+    );
   }
 }
 
-async function createContextMenu(): Promise<void> {
+let menuRebuildQueue: Promise<void> = Promise.resolve();
+
+function createContextMenu(): Promise<void> {
+  menuRebuildQueue = menuRebuildQueue
+    .then(() => rebuildContextMenuInternal())
+    .catch((err) => {
+      console.error('Failed to rebuild context menus:', err);
+    });
+  return menuRebuildQueue;
+}
+
+async function rebuildContextMenuInternal(): Promise<void> {
+  const [{ shortenEnabled, screenshotContextMenuEnabled }, loc] = await Promise.all([
+    browser.storage.sync.get(['shortenEnabled', 'screenshotContextMenuEnabled']),
+    getCurrentLocale(),
+  ]);
+
   await new Promise<void>((resolve) => browser.contextMenus.removeAll(() => resolve()));
 
+  const createMenuItem = (createProperties: Browser.contextMenus.CreateProperties) => {
+    browser.contextMenus.create(createProperties, () => {
+      // Clear runtime.lastError if any browser quirk occurs
+      void browser.runtime.lastError;
+    });
+  };
+
   // 1. Right click on Media
-  browser.contextMenus.create({
+  createMenuItem({
     id: 'uploadToZipline',
-    title: 'Upload to Zipline',
+    title: translate(loc, 'menuUploadToZipline'),
     contexts: ['image', 'video', 'audio'],
   });
 
-  const { shortenEnabled, screenshotContextMenuEnabled } = await browser.storage.sync.get([
-    'shortenEnabled',
-    'screenshotContextMenuEnabled',
-  ]);
-
   // 2. Right click on Link
   if (shortenEnabled) {
-    browser.contextMenus.create({
+    createMenuItem({
       id: 'shortenURL',
-      title: 'Shorten URL with Zipline',
+      title: translate(loc, 'menuShortenURL'),
       contexts: ['link'],
     });
   }
@@ -644,19 +815,19 @@ async function createContextMenu(): Promise<void> {
   // 3. Right click on Page (Screenshots & Clipboard)
   const showScreenshotMenus = screenshotContextMenuEnabled !== false;
   if (showScreenshotMenus) {
-    browser.contextMenus.create({
+    createMenuItem({
       id: 'snipArea',
-      title: '✂️ 選取區域截圖並上傳',
+      title: translate(loc, 'menuSnipArea'),
       contexts: ['page'],
     });
-    browser.contextMenus.create({
+    createMenuItem({
       id: 'captureVisible',
-      title: '🖥️ 截取可見畫面並上傳',
+      title: translate(loc, 'menuCaptureVisible'),
       contexts: ['page'],
     });
-    browser.contextMenus.create({
+    createMenuItem({
       id: 'uploadClipboard',
-      title: '📋 上傳剪貼簿圖片',
+      title: translate(loc, 'menuUploadClipboard'),
       contexts: ['page'],
     });
   }

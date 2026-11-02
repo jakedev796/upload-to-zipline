@@ -1,4 +1,5 @@
 /.idea/
+.gemini/
 CLAUDE.md
 docs/*
 !docs/RELEASING.md

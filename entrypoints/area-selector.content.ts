@@ -11,13 +11,13 @@ export default defineContentScript({
     let currentRect = { x: 0, y: 0, width: 0, height: 0 };
 
     browser.runtime.onMessage.addListener((msg: unknown) => {
-      const message = msg as { action?: string };
+      const message = msg as { action?: string; tipText?: string };
       if (message && message.action === 'startAreaSnip') {
-        initOverlay();
+        initOverlay(message.tipText);
       }
     });
 
-    function initOverlay() {
+    function initOverlay(tipText?: string) {
       cleanup();
 
       overlay = document.createElement('div');
@@ -52,7 +52,7 @@ export default defineContentScript({
 
       // Tip bar
       const tip = document.createElement('div');
-      tip.textContent = '拖曳滑鼠選取截圖區域 ｜ 按 ESC 取消';
+      tip.textContent = tipText || '拖曳滑鼠選取截圖區域 ｜ 按 ESC 取消';
       tip.style.cssText = `
         position: absolute;
         top: 20px;
@@ -194,4 +194,3 @@ export default defineContentScript({
     }
   },
 });
-

@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from '@/composables/useI18n';
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   (e: 'uploadSuccess', url: string): void;
@@ -72,7 +75,7 @@ function onDrop(e: DragEvent) {
 async function handleUploadFile(file: File, filename: string) {
   if (isUploading.value) return;
   isUploading.value = true;
-  uploadStatusText.value = '正在讀取與處理檔案...';
+  uploadStatusText.value = t('readingFile');
   emit('uploadStart');
 
   try {
@@ -83,7 +86,7 @@ async function handleUploadFile(file: File, filename: string) {
       reader.readAsDataURL(file);
     });
 
-    uploadStatusText.value = '正在上傳至 Zipline...';
+    uploadStatusText.value = t('uploading');
     const res = (await browser.runtime.sendMessage({
       action: 'uploadBlob',
       dataUrl,
@@ -93,11 +96,11 @@ async function handleUploadFile(file: File, filename: string) {
     if (res?.success && res.url) {
       emit('uploadSuccess', res.url);
     } else {
-      emit('uploadError', res?.error || '檔案上傳失敗。');
+      emit('uploadError', res?.error || t('uploadFailed', { msg: '' }));
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    emit('uploadError', `上傳失敗: ${msg}`);
+    emit('uploadError', t('uploadFailed', { msg }));
   } finally {
     isUploading.value = false;
     uploadStatusText.value = '';
@@ -135,12 +138,13 @@ async function handleUploadFile(file: File, filename: string) {
     <div v-else class="py-2 flex flex-col items-center justify-center gap-1.5">
       <div class="text-2xl opacity-80">📁</div>
       <p class="text-xs font-medium text-text">
-        點擊選擇檔案，或將圖片拖曳至此
+        {{ t('dropPrompt') }}
       </p>
-      <p class="text-[11px] text-text-muted">
-        支援按 <kbd class="px-1.5 py-0.5 rounded bg-[#202025] border border-border text-[10px]">Ctrl+V</kbd> 直接貼上截圖
+      <p class="text-[11px] text-text-muted flex items-center justify-center gap-1">
+        <span>{{ t('pastePrompt', { key: '' }).split('{key}')[0] }}</span>
+        <kbd class="px-1.5 py-0.5 rounded bg-[#202025] border border-border text-[10px]">Ctrl+V</kbd>
+        <span>{{ t('pastePrompt', { key: '' }).split('{key}')[1] }}</span>
       </p>
     </div>
   </div>
 </template>
-

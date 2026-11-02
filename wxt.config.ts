@@ -17,13 +17,14 @@ export default defineConfig({
     permissions: [
       'storage',
       'contextMenus',
+      'tabs',
       'activeTab',
       'clipboardWrite',
       'clipboardRead',
       'notifications',
       'scripting',
     ],
-    host_permissions: ['*://*/*'],
+    host_permissions: ['<all_urls>'],
     action: {
       default_title: 'Upload to Zipline',
     },

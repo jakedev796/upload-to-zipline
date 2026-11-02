@@ -2,7 +2,9 @@
 import { onMounted, ref } from 'vue';
 import { clearUploadHistory, getUploadHistory } from '@/composables/useHistory';
 import { type UploadHistoryItem } from '@/types/settings';
+import { useI18n } from '@/composables/useI18n';
 
+const { t } = useI18n();
 const history = ref<UploadHistoryItem[]>([]);
 const copiedId = ref<string | null>(null);
 
@@ -39,11 +41,11 @@ async function onClear() {
 
 function formatTime(timestamp: number): string {
   const diffSec = Math.floor((Date.now() - timestamp) / 1000);
-  if (diffSec < 60) return '剛剛';
+  if (diffSec < 60) return t('justNow');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} 分鐘前`;
+  if (diffMin < 60) return t('minutesAgo', { m: diffMin });
   const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} 小時前`;
+  if (diffHour < 24) return t('hoursAgo', { h: diffHour });
   const date = new Date(timestamp);
   return `${date.getMonth() + 1}/${date.getDate()}`;
 }
@@ -53,15 +55,15 @@ function formatTime(timestamp: number): string {
   <div v-if="history.length > 0" class="space-y-2">
     <div class="flex items-center justify-between">
       <h3 class="text-[10.5px] tracking-[0.07em] uppercase font-semibold text-text-muted">
-        最近上傳 ({{ history.length }}/5)
+        {{ t('recentTitle', { count: history.length, max: 5 }) }}
       </h3>
       <button
         type="button"
         class="text-[11px] text-text-muted hover:text-danger transition cursor-pointer"
-        title="清除上傳紀錄"
+        :title="t('clearHistory')"
         @click="onClear"
       >
-        清除紀錄
+        {{ t('clearHistory') }}
       </button>
     </div>
 
@@ -105,7 +107,7 @@ function formatTime(timestamp: number): string {
             ]"
             @click="onCopy(item)"
           >
-            {{ copiedId === item.id ? '已複製' : '複製' }}
+            {{ copiedId === item.id ? t('copied') : t('copy') }}
           </button>
 
           <a
@@ -113,7 +115,7 @@ function formatTime(timestamp: number): string {
             target="_blank"
             rel="noopener noreferrer"
             class="p-1 text-text-muted hover:text-accent transition text-xs"
-            title="在新分頁開啟"
+            :title="t('openInNewTab')"
           >
             ↗
           </a>
@@ -122,4 +124,3 @@ function formatTime(timestamp: number): string {
     </div>
   </div>
 </template>
-
