@@ -9,6 +9,8 @@
     "dev:firefox": "wxt -b firefox",
     "build": "wxt build",
     "build:firefox": "wxt build -b firefox",
+    "build:firefox:self": "node scripts/sign-firefox.mjs --build-only",
+    "sign:firefox": "node scripts/sign-firefox.mjs",
     "zip": "wxt zip",
     "zip:firefox": "wxt zip -b firefox",
     "compile": "vue-tsc --noEmit",

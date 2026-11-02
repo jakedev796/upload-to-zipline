@@ -54,9 +54,13 @@ export default defineConfig({
     },
     browser_specific_settings: {
       gecko: {
-        id: 'jake@shreves.dev',
+        id: process.env.FIREFOX_EXTENSION_ID || 'jake@shreves.dev',
         strict_min_version: '109.0',
-      },
+        data_collection_permissions: {
+          required: ['none'],
+          optional: [],
+        },
+      } as Record<string, unknown>,
     },
   },
 });
