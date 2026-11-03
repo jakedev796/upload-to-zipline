@@ -98,10 +98,20 @@ export default defineBackground(() => {
         return;
       }
       void (async () => {
-        const isValid = await hasActiveSnipTab(tabId);
-        if (!isValid) return;
-        await removeActiveSnipTab(tabId);
-        await handleAreaSnipCompleted(message, sender.tab);
+        try {
+          const isValid = await hasActiveSnipTab(tabId);
+          if (!isValid) return;
+          await removeActiveSnipTab(tabId);
+          await handleAreaSnipCompleted(message, sender.tab);
+        } catch (err) {
+          if (err instanceof NotifiedError) return;
+          console.error('Area snip failed:', err);
+          const loc = await getCurrentLocale();
+          showNotification(
+            translate(loc, 'notifyScreenshotErrorTitle'),
+            translate(loc, 'notifyActionFailedMsg')
+          );
+        }
       })();
       return;
     }
@@ -115,6 +125,7 @@ export default defineBackground(() => {
 
     // 2. Extension page actions (must originate from the extension itself, e.g. popup)
     const isExtensionPage =
+      !sender.tab &&
       sender.id === browser.runtime.id &&
       Boolean(sender.url?.startsWith(browser.runtime.getURL('/')));
 
@@ -193,6 +204,11 @@ export default defineBackground(() => {
     } catch (err) {
       if (err instanceof NotifiedError) return;
       console.error(`Command ${command} failed:`, err);
+      const loc = await getCurrentLocale();
+      showNotification(
+        translate(loc, 'notifyActionFailedTitle'),
+        translate(loc, 'notifyActionFailedMsg')
+      );
     }
   });
 });
@@ -349,8 +365,8 @@ async function startAreaSnip(tab?: { id?: number; url?: string; pendingUrl?: str
   const tipText = translate(loc, 'areaSnipTip');
 
   try {
-    await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
     await addActiveSnipTab(tab.id);
+    await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
   } catch {
     // Inject runtime content script on demand
     try {
@@ -359,8 +375,8 @@ async function startAreaSnip(tab?: { id?: number; url?: string; pendingUrl?: str
         files: ['/content-scripts/area-selector.js'],
       });
       await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
-      await addActiveSnipTab(tab.id);
     } catch (injectErr) {
+      await removeActiveSnipTab(tab.id);
       if (isProtectedPageError(injectErr)) {
         showNotification(
           translate(loc, 'notifyProtectedPageNoticeTitle'),
@@ -391,15 +407,31 @@ async function handleAreaSnipCompleted(
   tab?: { id?: number; windowId?: number }
 ): Promise<void> {
   const rect = message.rect;
-  if (!rect || rect.width <= 0 || rect.height <= 0) return;
+  if (
+    !rect ||
+    !Number.isFinite(rect.x) ||
+    !Number.isFinite(rect.y) ||
+    !Number.isFinite(rect.width) ||
+    !Number.isFinite(rect.height) ||
+    rect.width <= 0 ||
+    rect.height <= 0
+  ) {
+    return;
+  }
 
   const dataUrl = await captureVisibleDataUrl(tab?.windowId);
   const res = await fetch(dataUrl);
   const fullBlob = await res.blob();
   const bitmap = await createImageBitmap(fullBlob);
 
-  const windowW = rect.windowWidth || bitmap.width;
-  const windowH = rect.windowHeight || bitmap.height;
+  const windowW =
+    Number.isFinite(rect.windowWidth) && (rect.windowWidth ?? 0) > 0
+      ? (rect.windowWidth as number)
+      : bitmap.width;
+  const windowH =
+    Number.isFinite(rect.windowHeight) && (rect.windowHeight ?? 0) > 0
+      ? (rect.windowHeight as number)
+      : bitmap.height;
   const scaleX = bitmap.width / windowW;
   const scaleY = bitmap.height / windowH;
 
