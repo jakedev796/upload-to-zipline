@@ -19,7 +19,16 @@ export const EXPIRY_PRESETS = [
   { value: '1y', label: '1 year' },
 ] as const;
 
+export type Locale = 'en' | 'zh-TW' | 'ja';
+
+export const LOCALE_OPTIONS: { value: Locale; label: string }[] = [
+  { value: 'en', label: 'English' },
+  { value: 'zh-TW', label: '繁體中文' },
+  { value: 'ja', label: '日本語' },
+];
+
 export interface Settings {
+  locale: Locale;
   requestURL: string;
   authToken: string;
   expiryEnabled: boolean;
@@ -27,6 +36,7 @@ export interface Settings {
   maxViewsEnabled: boolean;
   maxViews: number;
   shortenEnabled: boolean;
+  screenshotContextMenuEnabled: boolean;
   imageConversionEnabled: boolean;
   imageConversionFormat: ImageFormat;
   imageConversionQuality: number;
@@ -35,6 +45,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  locale: 'en',
   requestURL: '',
   authToken: '',
   expiryEnabled: false,
@@ -42,6 +53,7 @@ export const DEFAULT_SETTINGS: Settings = {
   maxViewsEnabled: false,
   maxViews: 0,
   shortenEnabled: false,
+  screenshotContextMenuEnabled: true,
   imageConversionEnabled: false,
   imageConversionFormat: 'webp',
   imageConversionQuality: 80,
@@ -50,6 +62,7 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 export const SETTINGS_KEYS: (keyof Settings)[] = [
+  'locale',
   'requestURL',
   'authToken',
   'expiryEnabled',
@@ -57,9 +70,21 @@ export const SETTINGS_KEYS: (keyof Settings)[] = [
   'maxViewsEnabled',
   'maxViews',
   'shortenEnabled',
+  'screenshotContextMenuEnabled',
   'imageConversionEnabled',
   'imageConversionFormat',
   'imageConversionQuality',
   'imageCompressionEnabled',
   'imageCompressionQuality',
 ];
+
+export interface UploadHistoryItem {
+  id: string;
+  url: string;
+  filename: string;
+  timestamp: number;
+  thumbnail?: string;
+  size?: number;
+}
+
+export const MAX_HISTORY_ITEMS = 5;

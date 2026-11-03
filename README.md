@@ -12,7 +12,11 @@ A browser extension that uploads media to Zipline directly from the right-click 
 ## Features
 
 - Right-click any image, video, or audio → upload to your Zipline instance
-- Toolbar icon opens a settings popup
+- Dedicated toolbar Upload Hub with drag-and-drop zone, file picker, and recent upload history
+- In-browser area snip screenshot (`Alt+Shift+S`) and visible tab capture (`Alt+Shift+V`)
+- Upload images directly from clipboard paste (`Ctrl+V` in popup or `Alt+Shift+U`)
+- Client-side image format conversion (WebP, AVIF, JPEG, PNG) with quality settings
+- Multi-language UI support (English, Traditional Chinese, Japanese) with live language switching
 - Right-click any link → "Shorten URL with Zipline" (optional)
 - Auto-delete uploads after a configurable expiry (1h to 1y)
 - Per-upload max view-count limit
