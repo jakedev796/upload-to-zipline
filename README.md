@@ -6,7 +6,9 @@ A browser extension that uploads media, screenshots, and clipboard images to you
 [![Chrome Extension](https://img.shields.io/chrome-web-store/v/ngeeifojlejglmpkclhkopklbjkmlmdo?label=Chrome%20Web%20Store&logo=googlechrome&color=blue)](https://chromewebstore.google.com/detail/upload-to-zipline/ngeeifojlejglmpkclhkopklbjkmlmdo)
 
 <p align="center">
-  <img src="upload-to-zipline.png" alt="Upload to Zipline options page" width="420" />
+  <img src="upload-hub.png" alt="Upload Hub popup with Area Snip, Visible Area, and From Clipboard buttons above a drag-and-drop zone" width="400" valign="top" />
+  &nbsp;
+  <img src="settings.png" alt="Settings page with language, connection, upload options, image processing, and context menu sections" width="300" valign="top" />
 </p>
 
 ## Features
