@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { clearUploadHistory, getUploadHistory } from '@/composables/useHistory';
-import { type UploadHistoryItem } from '@/types/settings';
+import { type UploadHistoryItem, MAX_HISTORY_ITEMS } from '@/types/settings';
 import { useI18n } from '@/composables/useI18n';
 
 const { t } = useI18n();
@@ -55,7 +55,7 @@ function formatTime(timestamp: number): string {
   <div v-if="history.length > 0" class="space-y-2">
     <div class="flex items-center justify-between">
       <h3 class="text-[10.5px] tracking-[0.07em] uppercase font-semibold text-text-muted">
-        {{ t('recentTitle', { count: history.length, max: 5 }) }}
+        {{ t('recentTitle', { count: history.length, max: MAX_HISTORY_ITEMS }) }}
       </h3>
       <button
         type="button"

@@ -11,20 +11,26 @@ export default defineConfig({
   vite: () => ({
     plugins: [tailwindcss()],
   }),
+  hooks: {
+    'build:manifestGenerated': (_wxt, manifest) => {
+      if (manifest.content_scripts?.length === 0) {
+        delete manifest.content_scripts;
+      }
+    },
+  },
   manifest: {
     name: 'Upload to Zipline',
     description: 'Upload media, screenshots, and clipboard to Zipline.',
     permissions: [
       'storage',
       'contextMenus',
-      'tabs',
       'activeTab',
       'clipboardWrite',
-      'clipboardRead',
       'notifications',
       'scripting',
     ],
-    host_permissions: ['<all_urls>'],
+    optional_permissions: ['clipboardRead'],
+    host_permissions: ['*://*/*'],
     action: {
       default_title: 'Upload to Zipline',
     },
@@ -37,24 +43,24 @@ export default defineConfig({
         suggested_key: {
           default: 'Alt+Shift+S',
         },
-        description: '選取區域截圖並上傳至 Zipline',
+        description: 'Capture selected area and upload to Zipline',
       },
       'capture-visible': {
         suggested_key: {
           default: 'Alt+Shift+V',
         },
-        description: '截取當前可見畫面並上傳至 Zipline',
+        description: 'Capture visible area and upload to Zipline',
       },
       'upload-clipboard': {
         suggested_key: {
           default: 'Alt+Shift+U',
         },
-        description: '上傳剪貼簿圖片至 Zipline',
+        description: 'Upload image from clipboard to Zipline',
       },
     },
     browser_specific_settings: {
       gecko: {
-        id: process.env.FIREFOX_EXTENSION_ID || 'jake@shreves.dev',
+        id: 'jake@shreves.dev',
         strict_min_version: '109.0',
         data_collection_permissions: {
           required: ['none'],

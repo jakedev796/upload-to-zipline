@@ -1,8 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useI18n } from '@/composables/useI18n';
+import { isAllowedMediaFile, MissingConfigError, uploadToZipline } from '@/utils/upload';
 
 const { t } = useI18n();
+
+const pastePromptParts = computed(() => {
+  const text = t('pastePrompt', { key: '___KEY___' });
+  return text.split('___KEY___');
+});
 
 const emit = defineEmits<{
   (e: 'uploadSuccess', url: string): void;
@@ -74,31 +80,23 @@ function onDrop(e: DragEvent) {
 
 async function handleUploadFile(file: File, filename: string) {
   if (isUploading.value) return;
+  if (!isAllowedMediaFile(file)) {
+    emit('uploadError', t('unsupportedFileType'));
+    return;
+  }
+
   isUploading.value = true;
-  uploadStatusText.value = t('readingFile');
+  uploadStatusText.value = t('uploading');
   emit('uploadStart');
 
   try {
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-    uploadStatusText.value = t('uploading');
-    const res = (await browser.runtime.sendMessage({
-      action: 'uploadBlob',
-      dataUrl,
-      filename,
-    })) as { success: boolean; url?: string; error?: string };
-
-    if (res?.success && res.url) {
-      emit('uploadSuccess', res.url);
-    } else {
-      emit('uploadError', res?.error || t('uploadFailed', { msg: '' }));
-    }
+    const url = await uploadToZipline(file, filename);
+    emit('uploadSuccess', url);
   } catch (err: unknown) {
+    if (err instanceof MissingConfigError) {
+      emit('uploadError', t('missingConfig'));
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     emit('uploadError', t('uploadFailed', { msg }));
   } finally {
@@ -130,9 +128,10 @@ async function handleUploadFile(file: File, filename: string) {
       @change="onFileSelected"
     />
 
-    <div v-if="isUploading" class="py-3 flex flex-col items-center justify-center gap-2">
+    <div v-if="isUploading" class="py-3 flex flex-col items-center justify-center gap-1.5">
       <div class="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin"></div>
-      <p class="text-xs text-text-muted">{{ uploadStatusText }}</p>
+      <p class="text-xs text-text font-medium">{{ uploadStatusText }}</p>
+      <p class="text-[11px] text-text-muted">{{ t('uploadingNotice') }}</p>
     </div>
 
     <div v-else class="py-2 flex flex-col items-center justify-center gap-1.5">
@@ -141,9 +140,9 @@ async function handleUploadFile(file: File, filename: string) {
         {{ t('dropPrompt') }}
       </p>
       <p class="text-[11px] text-text-muted flex items-center justify-center gap-1">
-        <span>{{ t('pastePrompt', { key: '' }).split('{key}')[0] }}</span>
+        <span>{{ pastePromptParts[0] }}</span>
         <kbd class="px-1.5 py-0.5 rounded bg-[#202025] border border-border text-[10px]">Ctrl+V</kbd>
-        <span>{{ t('pastePrompt', { key: '' }).split('{key}')[1] }}</span>
+        <span>{{ pastePromptParts[1] }}</span>
       </p>
     </div>
   </div>

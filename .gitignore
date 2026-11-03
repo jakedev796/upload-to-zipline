@@ -1,7 +1,4 @@
 /.idea/
-.gemini/
-.env
-.env.*
 CLAUDE.md
 docs/*
 !docs/RELEASING.md

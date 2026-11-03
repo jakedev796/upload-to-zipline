@@ -2,7 +2,7 @@
 import { useI18n } from '@/composables/useI18n';
 import { LOCALE_OPTIONS, type Locale } from '@/types/settings';
 
-const { locale, setLocale } = useI18n();
+const { locale, setLocale, t } = useI18n();
 
 function onChange(e: Event) {
   const target = e.target as HTMLSelectElement;
@@ -19,7 +19,7 @@ function onChange(e: Event) {
       :value="locale"
       class="bg-panel hover:bg-[#202025] text-text-muted hover:text-text border border-border rounded px-2.5 py-1 pl-6 text-xs
              focus:outline-none focus:border-accent cursor-pointer transition appearance-none pr-5"
-      title="切換語言 / Switch Language / 言語切換"
+      :title="t('language')"
       @change="onChange"
     >
       <option

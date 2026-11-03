@@ -2,7 +2,6 @@
 import { computed, onMounted, ref } from 'vue';
 import {
   loadSettings,
-  notifyMenusToRebuild,
   saveSettings,
 } from '@/composables/useSettings';
 import { useI18n, type TranslationKey } from '@/composables/useI18n';
@@ -32,12 +31,11 @@ const localizedExpiryPresets = computed(() => {
   }));
 });
 
+const localeExplicitlyChanged = ref(false);
+
 onMounted(async () => {
   const loaded = await loadSettings();
   settings.value = loaded;
-  if (loaded.locale && loaded.locale !== locale.value) {
-    void setLocale(loaded.locale);
-  }
   const inPresets = EXPIRY_PRESETS.some((p) => p.value === loaded.expiryTime);
   if (loaded.expiryTime && !inPresets) {
     customExpiryOption.value = {
@@ -50,6 +48,7 @@ onMounted(async () => {
 function onLocaleChange(e: Event) {
   const target = e.target as HTMLSelectElement;
   const newLocale = target.value as Locale;
+  localeExplicitlyChanged.value = true;
   settings.value.locale = newLocale;
   void setLocale(newLocale);
 }
@@ -94,8 +93,7 @@ async function onSave() {
     authToken: settings.value.authToken.trim(),
   };
   settings.value = toSave;
-  await saveSettings(toSave);
-  await notifyMenusToRebuild();
+  await saveSettings(toSave, localeExplicitlyChanged.value);
   setStatus(t('settingsSaved'), 'success');
 }
 </script>

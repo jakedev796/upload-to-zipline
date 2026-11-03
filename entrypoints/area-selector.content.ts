@@ -1,6 +1,5 @@
 export default defineContentScript({
-  matches: ['*://*/*'],
-  runAt: 'document_idle',
+  registration: 'runtime',
   main() {
     let overlay: HTMLDivElement | null = null;
     let canvas: HTMLCanvasElement | null = null;
@@ -52,7 +51,7 @@ export default defineContentScript({
 
       // Tip bar
       const tip = document.createElement('div');
-      tip.textContent = tipText || '拖曳滑鼠選取截圖區域 ｜ 按 ESC 取消';
+      tip.textContent = tipText || 'Drag to select capture area | Press ESC to cancel';
       tip.style.cssText = `
         position: absolute;
         top: 20px;
@@ -155,10 +154,13 @@ export default defineContentScript({
             windowWidth: window.innerWidth,
             windowHeight: window.innerHeight,
           },
-          dpr: window.devicePixelRatio || 1,
         };
         cleanup();
-        void browser.runtime.sendMessage(payload);
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            void browser.runtime.sendMessage(payload);
+          });
+        });
       } else {
         // Reset if too small
         drawInitialMask();
@@ -168,6 +170,7 @@ export default defineContentScript({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         cleanup();
+        void browser.runtime.sendMessage({ action: 'areaSnipCancelled' });
       }
     }
 

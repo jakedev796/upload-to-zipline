@@ -1,6 +1,5 @@
 import { ref, computed } from 'vue';
 import { type Locale, DEFAULT_SETTINGS } from '@/types/settings';
-import { notifyMenusToRebuild } from '@/composables/useSettings';
 
 export const MESSAGES = {
   'zh-TW': {
@@ -34,6 +33,11 @@ export const MESSAGES = {
     readingFile: '正在讀取與處理檔案...',
     uploading: '正在上傳至 Zipline...',
     uploadFailed: '上傳失敗: {msg}',
+    uploadingNotice: '正在上傳中... 請保持此視窗開啟至完成。',
+    unsupportedFileType: '不支援的檔案類型，僅支援圖片、影片與音訊檔案。',
+    clipboardPermissionDenied: '未授予剪貼簿讀取權限。您也可以在彈出視窗中直接按 Ctrl+V 貼上圖片！',
+    notifyOpenPopupForClipboardTitle: '剪貼簿上傳',
+    notifyOpenPopupForClipboardMsg: '請開啟擴充功能彈出視窗並按 Ctrl+V 貼上截圖。',
 
     // Recent Uploads
     recentTitle: '最近上傳 ({count}/{max})',
@@ -144,6 +148,11 @@ export const MESSAGES = {
     readingFile: 'Reading and processing file...',
     uploading: 'Uploading to Zipline...',
     uploadFailed: 'Upload failed: {msg}',
+    uploadingNotice: 'Uploading... please keep this window open until finished.',
+    unsupportedFileType: 'Unsupported file type. Only image, video, and audio files are allowed.',
+    clipboardPermissionDenied: 'Clipboard read permission was not granted. You can also press Ctrl+V directly in the popup!',
+    notifyOpenPopupForClipboardTitle: 'Clipboard Upload',
+    notifyOpenPopupForClipboardMsg: 'Please open the extension popup and press Ctrl+V to paste and upload.',
 
     // Recent Uploads
     recentTitle: 'Recent Uploads ({count}/{max})',
@@ -254,6 +263,11 @@ export const MESSAGES = {
     readingFile: 'ファイルを読み込み・処理中...',
     uploading: 'Zipline にアップロード中...',
     uploadFailed: 'アップロード失敗: {msg}',
+    uploadingNotice: 'アップロード中... 完了するまでこのウィンドウを閉じないでください。',
+    unsupportedFileType: 'サポートされていないファイル形式です。画像・動画・音声ファイルのみ対応しています。',
+    clipboardPermissionDenied: 'クリップボードの読み取り権限が許可されませんでした。ポップアップ内で直接 Ctrl+V を押して貼り付けることもできます！',
+    notifyOpenPopupForClipboardTitle: 'クリップボードアップロード',
+    notifyOpenPopupForClipboardMsg: '拡張機能のポップアップを開き、Ctrl+V を押して貼り付けてください。',
 
     // Recent Uploads
     recentTitle: '最近のアップロード ({count}/{max})',
@@ -335,7 +349,38 @@ export const MESSAGES = {
   },
 } as const;
 
-export type TranslationKey = keyof (typeof MESSAGES)['zh-TW'];
+export type TranslationKey = keyof (typeof MESSAGES)['en'];
+
+export function isValidLocale(value: unknown): value is Locale {
+  return value === 'en' || value === 'zh-TW' || value === 'ja';
+}
+
+export function detectBrowserLocale(): Locale {
+  try {
+    const uiLang =
+      (typeof browser !== 'undefined' && browser.i18n?.getUILanguage?.()) ||
+      (typeof navigator !== 'undefined' ? navigator.language : '') ||
+      '';
+    const lower = uiLang.toLowerCase();
+    if (lower.startsWith('ja')) return 'ja';
+    if (lower.startsWith('zh')) return 'zh-TW';
+  } catch {
+    // ignore and fallback
+  }
+  return DEFAULT_SETTINGS.locale;
+}
+
+export async function getCurrentLocale(): Promise<Locale> {
+  try {
+    const { locale } = await browser.storage.sync.get(['locale']);
+    if (isValidLocale(locale)) {
+      return locale;
+    }
+  } catch {
+    // fallback to browser language detection
+  }
+  return detectBrowserLocale();
+}
 
 // Helper to translate standalone
 export function translate(
@@ -343,18 +388,18 @@ export function translate(
   key: TranslationKey,
   params?: Record<string, string | number>
 ): string {
-  const dict = MESSAGES[locale] || MESSAGES['zh-TW'];
-  let text: string = dict[key] || MESSAGES['zh-TW'][key] || key;
+  const dict = MESSAGES[locale] || MESSAGES.en;
+  let text: string = dict[key] || MESSAGES.en[key] || key;
   if (params) {
     for (const [paramKey, paramVal] of Object.entries(params)) {
-      text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), String(paramVal));
+      text = text.replace(new RegExp(`\\{${paramKey}\\}`, 'g'), () => String(paramVal));
     }
   }
   return text;
 }
 
 // Global reactive locale for UI
-const currentLocale = ref<Locale>(DEFAULT_SETTINGS.locale);
+const currentLocale = ref<Locale>(detectBrowserLocale());
 let isInitialized = false;
 
 export function useI18n() {
@@ -362,20 +407,7 @@ export function useI18n() {
     isInitialized = true;
     void (async () => {
       try {
-        const stored = await browser.storage.sync.get(['locale']);
-        if (stored.locale && (stored.locale === 'en' || stored.locale === 'zh-TW' || stored.locale === 'ja')) {
-          currentLocale.value = stored.locale as Locale;
-        } else {
-          // Detect browser language
-          const browserLang = (typeof navigator !== 'undefined' ? navigator.language : '').toLowerCase();
-          if (browserLang.startsWith('ja')) {
-            currentLocale.value = 'ja';
-          } else if (browserLang.startsWith('zh')) {
-            currentLocale.value = 'zh-TW';
-          } else {
-            currentLocale.value = 'en';
-          }
-        }
+        currentLocale.value = await getCurrentLocale();
       } catch (err) {
         console.error('Failed to load locale:', err);
       }
@@ -386,7 +418,7 @@ export function useI18n() {
       browser.storage.onChanged.addListener((changes, area) => {
         if (area === 'sync' && changes.locale?.newValue) {
           const newLoc = changes.locale.newValue;
-          if (newLoc === 'en' || newLoc === 'zh-TW' || newLoc === 'ja') {
+          if (isValidLocale(newLoc)) {
             currentLocale.value = newLoc;
           }
         }
@@ -403,7 +435,6 @@ export function useI18n() {
       const stored = await browser.storage.sync.get(['locale']);
       if (changed || stored.locale !== newLocale) {
         await browser.storage.sync.set({ locale: newLocale });
-        await notifyMenusToRebuild();
       }
     } catch (err) {
       console.error('Failed to save locale:', err);

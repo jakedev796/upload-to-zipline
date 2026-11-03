@@ -1,31 +1,80 @@
-import { DEFAULT_SETTINGS, IMAGE_FORMATS, type ImageFormat, type Locale } from '@/types/settings';
-import { addUploadHistory } from '@/composables/useHistory';
-import { translate } from '@/composables/useI18n';
+import { getCurrentLocale, translate } from '@/composables/useI18n';
+import { isProtectedPageError, isProtectedUrl } from '@/utils/url';
+import {
+  generateTimestampFilename,
+  MissingConfigError,
+  uploadToZipline,
+} from '@/utils/upload';
 
-const CONVERTIBLE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-const IMAGE_TYPE_TO_EXTENSION: Record<string, string> = {
-  'image/avif': 'avif',
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-};
-const IMAGE_FORMAT_VALUES = new Set<string>(IMAGE_FORMATS.map((format) => format.value));
+const memorySnipTabs = new Set<number>();
 
-async function getCurrentLocale(): Promise<Locale> {
+/** Error that has already been surfaced to the user via a notification. */
+class NotifiedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NotifiedError';
+  }
+}
+
+async function addActiveSnipTab(tabId: number): Promise<void> {
   try {
-    const { locale } = await browser.storage.sync.get(['locale']);
-    if (locale === 'en' || locale === 'zh-TW' || locale === 'ja') {
-      return locale as Locale;
+    if (browser.storage?.session) {
+      const data = await browser.storage.session.get('snipTabs');
+      const tabs = new Set<number>((data.snipTabs as number[]) || []);
+      tabs.add(tabId);
+      await browser.storage.session.set({ snipTabs: Array.from(tabs) });
+      return;
     }
   } catch {
-    // fallback to default
+    // fallback to memory
   }
-  return DEFAULT_SETTINGS.locale;
+  memorySnipTabs.add(tabId);
+}
+
+async function removeActiveSnipTab(tabId: number): Promise<void> {
+  try {
+    if (browser.storage?.session) {
+      const data = await browser.storage.session.get('snipTabs');
+      const tabs = new Set<number>((data.snipTabs as number[]) || []);
+      tabs.delete(tabId);
+      await browser.storage.session.set({ snipTabs: Array.from(tabs) });
+      return;
+    }
+  } catch {
+    // fallback to memory
+  }
+  memorySnipTabs.delete(tabId);
+}
+
+async function hasActiveSnipTab(tabId: number): Promise<boolean> {
+  try {
+    if (browser.storage?.session) {
+      const data = await browser.storage.session.get('snipTabs');
+      const tabs = new Set<number>((data.snipTabs as number[]) || []);
+      return tabs.has(tabId);
+    }
+  } catch {
+    // fallback to memory
+  }
+  return memorySnipTabs.has(tabId);
 }
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(createContextMenu);
   browser.runtime.onStartup.addListener(createContextMenu);
+
+  browser.tabs.onRemoved.addListener((tabId) => {
+    void removeActiveSnipTab(tabId);
+  });
+
+  // Rebuild menus automatically when settings or locale change
+  browser.storage.onChanged.addListener((changes, area) => {
+    if (area === 'sync') {
+      if (changes.shortenEnabled || changes.screenshotContextMenuEnabled || changes.locale) {
+        void createContextMenu();
+      }
+    }
+  });
 
   browser.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const message = msg as {
@@ -38,22 +87,49 @@ export default defineBackground(() => {
         windowWidth?: number;
         windowHeight?: number;
       };
-      dpr?: number;
-      dataUrl?: string;
-      filename?: string;
     };
 
     if (!message || !message.action) return;
 
-    if (message.action === 'rebuildMenus') {
-      void createContextMenu();
-    } else if (message.action === 'areaSnipCompleted' && message.rect) {
-      void handleAreaSnipCompleted(message, sender.tab);
-    } else if (message.action === 'captureVisible') {
+    // 1. Content script snip callbacks (must come from a tracked tab and top-level frame)
+    if (message.action === 'areaSnipCompleted' && message.rect) {
+      const tabId = sender.tab?.id;
+      if (typeof tabId !== 'number' || sender.frameId !== 0) {
+        return;
+      }
+      void (async () => {
+        const isValid = await hasActiveSnipTab(tabId);
+        if (!isValid) return;
+        await removeActiveSnipTab(tabId);
+        await handleAreaSnipCompleted(message, sender.tab);
+      })();
+      return;
+    }
+
+    if (message.action === 'areaSnipCancelled') {
+      if (typeof sender.tab?.id === 'number') {
+        void removeActiveSnipTab(sender.tab.id);
+      }
+      return;
+    }
+
+    // 2. Extension page actions (must originate from the extension itself, e.g. popup)
+    const isExtensionPage =
+      sender.id === browser.runtime.id &&
+      Boolean(sender.url?.startsWith(browser.runtime.getURL('/')));
+
+    if (!isExtensionPage) return;
+
+    if (message.action === 'captureVisible') {
       void (async () => {
         try {
           const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
           const url = await captureVisible(tab);
+          if (!url) {
+            const loc = await getCurrentLocale();
+            sendResponse({ success: false, error: translate(loc, 'missingConfig') });
+            return;
+          }
           sendResponse({ success: true, url });
         } catch (err: unknown) {
           const errorMsg = err instanceof Error ? err.message : String(err);
@@ -61,7 +137,9 @@ export default defineBackground(() => {
         }
       })();
       return true;
-    } else if (message.action === 'startAreaSnip') {
+    }
+
+    if (message.action === 'startAreaSnip') {
       void (async () => {
         const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
         if (tab?.id) {
@@ -69,22 +147,6 @@ export default defineBackground(() => {
           sendResponse({ success: true });
         } else {
           sendResponse({ success: false, error: 'No active tab' });
-        }
-      })();
-      return true;
-    } else if (message.action === 'uploadBlob' && message.dataUrl) {
-      const dataUrl = message.dataUrl;
-      const filename = message.filename;
-      void (async () => {
-        try {
-          const res = await fetch(dataUrl);
-          const blob = await res.blob();
-          const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-          const url = await uploadBlob(blob, filename, tab);
-          sendResponse({ success: true, url });
-        } catch (err: unknown) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          sendResponse({ success: false, error: errorMsg });
         }
       })();
       return true;
@@ -105,6 +167,7 @@ export default defineBackground(() => {
         await uploadClipboardFromTab(tab);
       }
     } catch (err) {
+      if (err instanceof NotifiedError) return; // user was already notified
       console.error('Context menu action failed:', err);
       const loc = await getCurrentLocale();
       showNotification(
@@ -114,17 +177,21 @@ export default defineBackground(() => {
     }
   });
 
-  browser.commands.onCommand.addListener(async (command) => {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  browser.commands.onCommand.addListener(async (command, tab) => {
     try {
-      if (command === 'capture-area') {
-        await startAreaSnip(tab);
-      } else if (command === 'capture-visible') {
-        await captureVisible(tab);
-      } else if (command === 'upload-clipboard') {
+      if (command === 'upload-clipboard') {
         await uploadClipboardFromTab(tab);
+        return;
+      }
+      const activeTab =
+        tab ?? (await browser.tabs.query({ active: true, currentWindow: true }))[0];
+      if (command === 'capture-area') {
+        await startAreaSnip(activeTab);
+      } else if (command === 'capture-visible') {
+        await captureVisible(activeTab);
       }
     } catch (err) {
+      if (err instanceof NotifiedError) return;
       console.error(`Command ${command} failed:`, err);
     }
   });
@@ -137,86 +204,6 @@ function showNotification(title: string, message: string): void {
     title,
     message,
   });
-}
-
-function getImageFormat(value: unknown): ImageFormat {
-  return IMAGE_FORMAT_VALUES.has(String(value))
-    ? (value as ImageFormat)
-    : DEFAULT_SETTINGS.imageConversionFormat;
-}
-
-function getQuality(value: unknown, fallback: number): number {
-  const quality = Number(value);
-  return Number.isFinite(quality) && quality >= 1 && quality <= 100 ? quality : fallback;
-}
-
-function withImageExtension(filename: string, mimeType: string): string {
-  const extension = IMAGE_TYPE_TO_EXTENSION[mimeType];
-  if (!extension) return filename;
-
-  const basename = filename.replace(/\.[^.]+$/, '') || 'upload';
-  return `${basename}.${extension}`;
-}
-
-function readAscii(bytes: Uint8Array, offset: number, length: number): string {
-  let value = '';
-  for (let i = offset; i < offset + length; i += 1) {
-    value += String.fromCharCode(bytes[i]);
-  }
-  return value;
-}
-
-function readUint32BigEndian(bytes: Uint8Array, offset: number): number {
-  return (
-    bytes[offset] * 0x1000000 +
-    bytes[offset + 1] * 0x10000 +
-    bytes[offset + 2] * 0x100 +
-    bytes[offset + 3]
-  );
-}
-
-function readUint32LittleEndian(bytes: Uint8Array, offset: number): number {
-  return (
-    bytes[offset] +
-    bytes[offset + 1] * 0x100 +
-    bytes[offset + 2] * 0x10000 +
-    bytes[offset + 3] * 0x1000000
-  );
-}
-
-function isAnimatedPng(bytes: Uint8Array): boolean {
-  let offset = 8;
-  while (offset + 8 <= bytes.length) {
-    const length = readUint32BigEndian(bytes, offset);
-    const type = readAscii(bytes, offset + 4, 4);
-    if (type === 'acTL') return true;
-    if (type === 'IDAT' || type === 'IEND') return false;
-    offset += 12 + length;
-  }
-  return false;
-}
-
-function isAnimatedWebp(bytes: Uint8Array): boolean {
-  if (readAscii(bytes, 0, 4) !== 'RIFF' || readAscii(bytes, 8, 4) !== 'WEBP') return false;
-  let offset = 12;
-  while (offset + 8 <= bytes.length) {
-    const type = readAscii(bytes, offset, 4);
-    const length = readUint32LittleEndian(bytes, offset + 4);
-    if (type === 'ANIM') return true;
-    offset += 8 + length + (length % 2);
-  }
-  return false;
-}
-
-async function isConvertibleImage(blob: Blob): Promise<boolean> {
-  if (!CONVERTIBLE_IMAGE_TYPES.has(blob.type)) return false;
-  if (blob.type === 'image/jpeg') return true;
-
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  if (blob.type === 'image/png') return !isAnimatedPng(bytes);
-  if (blob.type === 'image/webp') return !isAnimatedWebp(bytes);
-
-  return false;
 }
 
 async function copyToClipboard(text: string, tabId?: number): Promise<boolean> {
@@ -254,166 +241,28 @@ async function copyToClipboard(text: string, tabId?: number): Promise<boolean> {
   return false;
 }
 
-async function generateThumbnail(blob: Blob): Promise<string | undefined> {
-  try {
-    if (!blob.type.startsWith('image/')) return undefined;
-    const bitmap = await createImageBitmap(blob);
-    const maxDim = 120;
-    let w = bitmap.width;
-    let h = bitmap.height;
-    if (w > h) {
-      if (w > maxDim) {
-        h = Math.round((h * maxDim) / w);
-        w = maxDim;
-      }
-    } else {
-      if (h > maxDim) {
-        w = Math.round((w * maxDim) / h);
-        h = maxDim;
-      }
-    }
-    const canvas = new OffscreenCanvas(w, h);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return undefined;
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close();
-    const thumbBlob = await canvas.convertToBlob({ type: 'image/webp', quality: 0.6 });
-    return new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.readAsDataURL(thumbBlob);
-    });
-  } catch {
-    return undefined;
-  }
-}
-
-function generateTimestampFilename(prefix = 'screenshot', ext = 'png'): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  return `${prefix}-${dateStr}.${ext}`;
-}
-
 export async function uploadBlob(
   blob: Blob,
   preferredFilename?: string,
   tab?: { id?: number }
-): Promise<string> {
-  const {
-    requestURL,
-    authToken,
-    expiryEnabled,
-    expiryTime,
-    maxViewsEnabled,
-    maxViews,
-    imageConversionEnabled,
-    imageConversionFormat,
-    imageConversionQuality,
-    imageCompressionEnabled,
-    imageCompressionQuality,
-  } = await browser.storage.sync.get([
-    'requestURL',
-    'authToken',
-    'expiryEnabled',
-    'expiryTime',
-    'maxViewsEnabled',
-    'maxViews',
-    'imageConversionEnabled',
-    'imageConversionFormat',
-    'imageConversionQuality',
-    'imageCompressionEnabled',
-    'imageCompressionQuality',
-  ]);
-
+): Promise<string | null> {
   const loc = await getCurrentLocale();
 
-  if (!requestURL || !authToken) {
-    showNotification(
-      translate(loc, 'notifyConfigRequiredTitle'),
-      translate(loc, 'notifyConfigRequiredMsg')
-    );
-    void browser.runtime.openOptionsPage();
-    throw new Error('Missing Zipline configuration');
-  }
-
-  const filename = preferredFilename || generateTimestampFilename('upload', 'png');
-  let uploadBlob = blob;
-  let uploadFilename = filename;
-
-  const canConvertImage = await isConvertibleImage(blob);
-  const conversionFormat = getImageFormat(imageConversionFormat);
-  const conversionQuality = getQuality(
-    imageConversionQuality,
-    DEFAULT_SETTINGS.imageConversionQuality
-  );
-
-  if (imageConversionEnabled && canConvertImage) {
-    const bitmap = await createImageBitmap(blob);
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(bitmap, 0, 0);
-      try {
-        uploadBlob = await canvas.convertToBlob({
-          type: `image/${conversionFormat}`,
-          quality: conversionQuality / 100,
-        });
-        uploadFilename = withImageExtension(uploadFilename, uploadBlob.type);
-      } finally {
-        bitmap.close();
-      }
-    }
-  }
-
-  const formData = new FormData();
-  formData.append('file', uploadBlob, uploadFilename);
-
-  const headers: Record<string, string> = {
-    authorization: String(authToken),
-    'x-zipline-format': 'random',
-  };
-  if (expiryEnabled && expiryTime) headers['x-zipline-deletes-at'] = String(expiryTime);
-  if (maxViewsEnabled && maxViews) headers['x-zipline-max-views'] = String(maxViews);
-  const clientConversionApplied = uploadBlob !== blob;
-  if (imageCompressionEnabled && !clientConversionApplied) {
-    headers['x-zipline-image-compression-percent'] = String(
-      getQuality(imageCompressionQuality, DEFAULT_SETTINGS.imageCompressionQuality)
-    );
-  }
-
-  const response = await fetch(String(requestURL), { method: 'POST', headers, body: formData });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Upload failed with status:', response.status, 'Response:', errorText);
-    throw new Error(`Upload failed with status ${response.status}`);
-  }
-
-  const result = await response.json();
-  if (!result.files || result.files.length === 0) {
-    throw new Error('No files returned in response');
-  }
-
-  const firstFile = result.files[0];
   let finalURL: string;
-  if (typeof firstFile === 'string') {
-    finalURL = firstFile;
-  } else if (firstFile && typeof firstFile === 'object' && firstFile.url) {
-    finalURL = firstFile.url;
-  } else {
-    throw new Error('Invalid file response format');
+  try {
+    finalURL = await uploadToZipline(blob, preferredFilename);
+  } catch (err) {
+    if (err instanceof MissingConfigError) {
+      showNotification(
+        translate(loc, 'notifyConfigRequiredTitle'),
+        translate(loc, 'notifyConfigRequiredMsg')
+      );
+      void browser.runtime.openOptionsPage();
+      return null;
+    }
+    throw err;
   }
 
-  if (String(requestURL).startsWith('https') && finalURL.startsWith('http:')) {
-    finalURL = finalURL.replace(/^http:/, 'https:');
-  }
-
-  if (!/^https?:\/\//i.test(finalURL)) {
-    throw new Error('Invalid URL returned by server: only HTTP/HTTPS protocols are allowed');
-  }
-
-  // Copy to clipboard
   const clipboardSuccess = await copyToClipboard(finalURL, tab?.id);
   if (clipboardSuccess) {
     showNotification(
@@ -426,18 +275,6 @@ export async function uploadBlob(
       translate(loc, 'notifyUploadSuccessFallbackMsg', { url: finalURL })
     );
   }
-
-  // Save to recent upload history
-  void (async () => {
-    const thumbnail = await generateThumbnail(uploadBlob);
-    await addUploadHistory({
-      url: finalURL,
-      filename: uploadFilename,
-      timestamp: Date.now(),
-      thumbnail,
-      size: uploadBlob.size,
-    });
-  })();
 
   return finalURL;
 }
@@ -462,68 +299,31 @@ async function captureVisibleDataUrl(windowId?: number): Promise<string> {
   });
 }
 
-function isProtectedUrl(url?: string): boolean {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  return (
-    lower.startsWith('chrome:') ||
-    lower.startsWith('chrome-extension:') ||
-    lower.startsWith('chrome-untrusted:') ||
-    lower.startsWith('about:') ||
-    lower.startsWith('edge:') ||
-    lower.startsWith('opera:') ||
-    lower.startsWith('brave:') ||
-    lower.startsWith('vivaldi:') ||
-    lower.startsWith('moz-extension:') ||
-    lower.startsWith('view-source:') ||
-    lower.startsWith('devtools:') ||
-    lower.includes('chrome.google.com/webstore') ||
-    lower.includes('chromewebstore.google.com') ||
-    lower.includes('addons.mozilla.org')
-  );
-}
-
-function isProtectedPageError(err: unknown): boolean {
-  if (!err) return false;
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    msg.includes('chrome://') ||
-    msg.includes('Cannot access a chrome') ||
-    msg.includes('The extensions gallery cannot be scripted') ||
-    msg.includes('Cannot access contents of the given frame') ||
-    msg.includes('Missing host permission') ||
-    msg.includes('cannot be scripted') ||
-    msg.includes('Extension manifest must request permission') ||
-    msg.includes('about:blank') ||
-    msg.includes('about:')
-  );
-}
-
-async function captureVisible(tab?: { id?: number; windowId?: number; url?: string }): Promise<string> {
+async function captureVisible(
+  tab?: { id?: number; windowId?: number; url?: string }
+): Promise<string | null> {
   const loc = await getCurrentLocale();
-  if (isProtectedUrl(tab?.url)) {
+  const notifyProtected = (): never => {
     showNotification(
       translate(loc, 'notifyProtectedPageNoticeTitle'),
       translate(loc, 'notifyProtectedPageNoticeMsg')
     );
-    throw new Error(translate(loc, 'notifyProtectedPageNoticeMsg'));
+    throw new NotifiedError(translate(loc, 'notifyProtectedPageNoticeMsg'));
+  };
+  if (isProtectedUrl(tab?.url)) {
+    notifyProtected();
   }
+  let dataUrl: string;
   try {
-    const dataUrl = await captureVisibleDataUrl(tab?.windowId);
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const filename = generateTimestampFilename('screenshot-visible', 'png');
-    return await uploadBlob(blob, filename, tab);
+    dataUrl = await captureVisibleDataUrl(tab?.windowId);
   } catch (err) {
-    if (isProtectedPageError(err)) {
-      showNotification(
-        translate(loc, 'notifyProtectedPageNoticeTitle'),
-        translate(loc, 'notifyProtectedPageNoticeMsg')
-      );
-      throw new Error(translate(loc, 'notifyProtectedPageNoticeMsg'));
-    }
+    if (isProtectedPageError(err)) notifyProtected();
     throw err;
   }
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const filename = generateTimestampFilename('screenshot-visible', 'png');
+  return await uploadBlob(blob, filename, tab);
 }
 
 async function startAreaSnip(tab?: { id?: number; url?: string; pendingUrl?: string }): Promise<void> {
@@ -550,14 +350,16 @@ async function startAreaSnip(tab?: { id?: number; url?: string; pendingUrl?: str
 
   try {
     await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
+    await addActiveSnipTab(tab.id);
   } catch {
-    // If content script was not ready, inject dynamically
+    // Inject runtime content script on demand
     try {
       await browser.scripting.executeScript({
         target: { tabId: tab.id },
         files: ['/content-scripts/area-selector.js'],
       });
       await browser.tabs.sendMessage(tab.id, { action: 'startAreaSnip', tipText });
+      await addActiveSnipTab(tab.id);
     } catch (injectErr) {
       if (isProtectedPageError(injectErr)) {
         showNotification(
@@ -585,7 +387,6 @@ async function handleAreaSnipCompleted(
       windowWidth?: number;
       windowHeight?: number;
     };
-    dpr?: number;
   },
   tab?: { id?: number; windowId?: number }
 ): Promise<void> {
@@ -622,78 +423,63 @@ async function handleAreaSnipCompleted(
   await uploadBlob(croppedBlob, filename, tab);
 }
 
-async function readClipboardImageInBackground(): Promise<Blob | null> {
-  if (typeof navigator === 'undefined' || !navigator.clipboard?.read) return null;
+async function readClipboardImageInBackground(): Promise<
+  { status: 'found'; blob: Blob } | { status: 'empty' } | { status: 'unsupported' }
+> {
+  if (typeof navigator === 'undefined' || !navigator.clipboard?.read) {
+    return { status: 'unsupported' };
+  }
   try {
+    if (browser.permissions?.request) {
+      const granted = await browser.permissions.request({ permissions: ['clipboardRead'] });
+      if (!granted) return { status: 'unsupported' };
+    }
     const items = await navigator.clipboard.read();
     for (const item of items) {
       for (const type of item.types) {
         if (type.startsWith('image/')) {
-          return await item.getType(type);
+          const blob = await item.getType(type);
+          return { status: 'found', blob };
         }
       }
     }
+    return { status: 'empty' };
   } catch {
-    // Not supported or denied in background context
+    return { status: 'unsupported' };
   }
-  return null;
 }
 
 async function uploadClipboardFromTab(tab?: { id?: number; url?: string }): Promise<void> {
-  const loc = await getCurrentLocale();
-
   try {
-    // 1. Try reading directly in background context (works in Firefox with clipboardRead permission)
-    const bgBlob = await readClipboardImageInBackground();
-    if (bgBlob) {
-      const filename = generateTimestampFilename('clipboard', 'png');
-      await uploadBlob(bgBlob, filename, tab);
-      return;
-    }
-
-    if (!tab?.id) {
-      showNotification(
-        translate(loc, 'notifyClipboardTitle'),
-        translate(loc, 'notifyNoActiveTab')
-      );
-      return;
-    }
-
-    if (isProtectedUrl(tab.url)) {
-      showNotification(
-        translate(loc, 'notifyProtectedPageNoticeTitle'),
-        translate(loc, 'notifyProtectedPageNoticeMsg')
-      );
-      return;
-    }
-
-    // 2. Fallback to reading via active tab content script (works in Chrome MV3 service worker)
-    const results = await browser.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: async () => {
+    // Call clipboard / openPopup before any storage await to preserve user gesture activation
+    if (typeof navigator === 'undefined' || !navigator.clipboard?.read) {
+      if (browser.action?.openPopup) {
         try {
-          const items = await navigator.clipboard.read();
-          for (const item of items) {
-            for (const type of item.types) {
-              if (type.startsWith('image/')) {
-                const blob = await item.getType(type);
-                return new Promise<string>((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                });
-              }
-            }
-          }
-          return null;
+          await browser.action.openPopup();
+          return;
         } catch {
-          return null;
+          // Fallback to notification below
         }
-      },
-    });
+      }
+      const loc = await getCurrentLocale();
+      showNotification(
+        translate(loc, 'notifyOpenPopupForClipboardTitle'),
+        translate(loc, 'notifyOpenPopupForClipboardMsg')
+      );
+      return;
+    }
 
-    const dataUrl = results?.[0]?.result as string | null;
-    if (!dataUrl) {
+    const result = await readClipboardImageInBackground();
+    if (result.status === 'found') {
+      const targetTab =
+        tab?.id ? tab : (await browser.tabs.query({ active: true, currentWindow: true }))[0];
+      const filename = generateTimestampFilename('clipboard', 'png');
+      await uploadBlob(result.blob, filename, targetTab);
+      return;
+    }
+
+    const loc = await getCurrentLocale();
+    if (result.status === 'empty') {
       showNotification(
         translate(loc, 'notifyClipboardTitle'),
         translate(loc, 'notifyNoImageInClipboard')
@@ -701,23 +487,26 @@ async function uploadClipboardFromTab(tab?: { id?: number; url?: string }): Prom
       return;
     }
 
-    const res = await fetch(dataUrl);
-    const blob = await res.blob();
-    const filename = generateTimestampFilename('clipboard', 'png');
-    await uploadBlob(blob, filename, tab);
-  } catch (err) {
-    if (isProtectedPageError(err)) {
-      showNotification(
-        translate(loc, 'notifyProtectedPageNoticeTitle'),
-        translate(loc, 'notifyProtectedPageNoticeMsg')
-      );
-    } else {
-      console.error('Failed to read clipboard:', err);
-      showNotification(
-        translate(loc, 'notifyClipboardTitle'),
-        translate(loc, 'notifyReadClipboardFailed')
-      );
+    if (browser.action?.openPopup) {
+      try {
+        await browser.action.openPopup();
+        return;
+      } catch {
+        // Fallback to notice
+      }
     }
+
+    showNotification(
+      translate(loc, 'notifyOpenPopupForClipboardTitle'),
+      translate(loc, 'notifyOpenPopupForClipboardMsg')
+    );
+  } catch (err) {
+    console.error('Failed to handle clipboard upload:', err);
+    const loc = await getCurrentLocale();
+    showNotification(
+      translate(loc, 'notifyClipboardTitle'),
+      translate(loc, 'notifyReadClipboardFailed')
+    );
   }
 }
 

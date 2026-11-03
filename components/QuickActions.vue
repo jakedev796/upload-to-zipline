@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useI18n } from '@/composables/useI18n';
+import { isProtectedUrl } from '@/utils/url';
+import { MissingConfigError, uploadToZipline } from '@/utils/upload';
 
 const { t } = useI18n();
 
@@ -12,27 +14,6 @@ const emit = defineEmits<{
 
 const isCapturingVisible = ref(false);
 const isReadingClipboard = ref(false);
-
-function isProtectedUrl(url?: string): boolean {
-  if (!url) return false;
-  const lower = url.toLowerCase();
-  return (
-    lower.startsWith('chrome:') ||
-    lower.startsWith('chrome-extension:') ||
-    lower.startsWith('chrome-untrusted:') ||
-    lower.startsWith('about:') ||
-    lower.startsWith('edge:') ||
-    lower.startsWith('opera:') ||
-    lower.startsWith('brave:') ||
-    lower.startsWith('vivaldi:') ||
-    lower.startsWith('moz-extension:') ||
-    lower.startsWith('view-source:') ||
-    lower.startsWith('devtools:') ||
-    lower.includes('chrome.google.com/webstore') ||
-    lower.includes('chromewebstore.google.com') ||
-    lower.includes('addons.mozilla.org')
-  );
-}
 
 async function onAreaSnip() {
   try {
@@ -85,16 +66,32 @@ async function onCaptureVisible() {
   }
 }
 
+async function requestClipboardPermission(): Promise<boolean> {
+  try {
+    if (browser.permissions?.request) {
+      return await browser.permissions.request({ permissions: ['clipboardRead'] });
+    }
+  } catch (err) {
+    console.warn('Clipboard permission request failed:', err);
+  }
+  return true;
+}
+
 async function onUploadClipboard() {
   if (isReadingClipboard.value) return;
   isReadingClipboard.value = true;
   emit('uploadStart');
 
   try {
+    const granted = await requestClipboardPermission();
+    if (!granted) {
+      emit('uploadError', t('clipboardPermissionDenied'));
+      return;
+    }
+
     let imageBlob: Blob | null = null;
     let filename = `clipboard-${Date.now()}.png`;
 
-    // Try reading via navigator.clipboard in popup first
     if (navigator.clipboard?.read) {
       try {
         const items = await navigator.clipboard.read();
@@ -109,36 +106,22 @@ async function onUploadClipboard() {
           if (imageBlob) break;
         }
       } catch {
-        // Fallback or permission prompt
+        // Permission denied or empty
       }
     }
 
     if (!imageBlob) {
       emit('uploadError', t('noImageInClipboard'));
-      isReadingClipboard.value = false;
       return;
     }
 
-    // Convert blob to dataUrl to send to background
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(imageBlob);
-    });
-
-    const res = (await browser.runtime.sendMessage({
-      action: 'uploadBlob',
-      dataUrl,
-      filename,
-    })) as { success: boolean; url?: string; error?: string };
-
-    if (res?.success && res.url) {
-      emit('uploadSuccess', res.url);
-    } else {
-      emit('uploadError', res?.error || t('clipboardUploadFailed', { msg: '' }));
-    }
+    const url = await uploadToZipline(imageBlob, filename);
+    emit('uploadSuccess', url);
   } catch (err: unknown) {
+    if (err instanceof MissingConfigError) {
+      emit('uploadError', t('missingConfig'));
+      return;
+    }
     const msg = err instanceof Error ? err.message : String(err);
     emit('uploadError', t('clipboardUploadFailed', { msg }));
   } finally {
